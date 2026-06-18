@@ -7,6 +7,7 @@ namespace Wyspa.App.Services;
 public sealed class AutoCaptureService : IDisposable
 {
     private readonly ISettingsService _settingsService;
+    private readonly ISecretStore _secretStore;
     private readonly IAudioLevelMonitorService _monitor;
     private readonly IAudioCaptureService _audioCapture;
     private readonly DictationOrchestrator _orchestrator;
@@ -17,17 +18,20 @@ public sealed class AutoCaptureService : IDisposable
     private DateTimeOffset _lastVoiceAt;
     private DateTimeOffset _recordingStartedAt;
     private DateTimeOffset _cooldownUntil;
+    private string? _monitorDeviceId;
     private bool _isStarting;
     private bool _isStopping;
 
     public AutoCaptureService(
         ISettingsService settingsService,
+        ISecretStore secretStore,
         IAudioLevelMonitorService monitor,
         IAudioCaptureService audioCapture,
         DictationOrchestrator orchestrator,
         OverlayStatusService overlay)
     {
         _settingsService = settingsService;
+        _secretStore = secretStore;
         _monitor = monitor;
         _audioCapture = audioCapture;
         _orchestrator = orchestrator;
@@ -35,22 +39,21 @@ public sealed class AutoCaptureService : IDisposable
         _dispatcher = System.Windows.Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
         _monitor.LevelAvailable += OnMonitorLevel;
         _audioCapture.LevelAvailable += OnRecordingLevel;
+        _orchestrator.ListeningStarting += OnListeningStarting;
+        _orchestrator.StateChanged += OnOrchestratorStateChanged;
     }
 
     public async Task RefreshAsync(CancellationToken cancellationToken = default)
     {
         _settings = await _settingsService.LoadAsync(cancellationToken);
-        if (_settings.ActivationMode is ActivationMode.AutoCapture && _settings.AutoCaptureListeningEnabled)
+        if (!_audioCapture.IsRecording)
         {
-            if (!_audioCapture.IsRecording)
+            if (!_monitor.IsRunning || !string.Equals(_monitorDeviceId, _settings.MicrophoneDeviceId, StringComparison.Ordinal))
             {
                 _monitor.Stop();
+                _monitorDeviceId = _settings.MicrophoneDeviceId;
                 await _monitor.StartAsync(_settings.MicrophoneDeviceId, cancellationToken);
             }
-        }
-        else
-        {
-            _monitor.Stop();
         }
     }
 
@@ -58,6 +61,8 @@ public sealed class AutoCaptureService : IDisposable
     {
         _monitor.LevelAvailable -= OnMonitorLevel;
         _audioCapture.LevelAvailable -= OnRecordingLevel;
+        _orchestrator.ListeningStarting -= OnListeningStarting;
+        _orchestrator.StateChanged -= OnOrchestratorStateChanged;
         _monitor.Dispose();
         _gate.Dispose();
     }
@@ -117,6 +122,13 @@ public sealed class AutoCaptureService : IDisposable
                 return;
             }
 
+            var apiKey = await _secretStore.GetApiKeyAsync(CancellationToken.None);
+            if (string.IsNullOrWhiteSpace(apiKey))
+            {
+                _cooldownUntil = DateTimeOffset.UtcNow.AddMilliseconds(1200);
+                return;
+            }
+
             _isStarting = true;
             _monitor.Stop();
             _recordingStartedAt = DateTimeOffset.UtcNow;
@@ -155,9 +167,7 @@ public sealed class AutoCaptureService : IDisposable
     private async Task RestartMonitorIfNeededAsync()
     {
         _settings = await _settingsService.LoadAsync(CancellationToken.None);
-        if (_settings.ActivationMode is not ActivationMode.AutoCapture ||
-            !_settings.AutoCaptureListeningEnabled ||
-            _audioCapture.IsRecording)
+        if (_audioCapture.IsRecording)
         {
             return;
         }
@@ -165,8 +175,24 @@ public sealed class AutoCaptureService : IDisposable
         await Task.Delay(200);
         if (!_monitor.IsRunning)
         {
+            _monitorDeviceId = _settings.MicrophoneDeviceId;
             await _monitor.StartAsync(_settings.MicrophoneDeviceId, CancellationToken.None);
         }
+    }
+
+    private void OnListeningStarting(object? sender, EventArgs e)
+    {
+        _monitor.Stop();
+    }
+
+    private void OnOrchestratorStateChanged(object? sender, DictationState state)
+    {
+        if (state is DictationState.Listening or DictationState.Transcribing)
+        {
+            return;
+        }
+
+        RunOnAppDispatcher(RestartMonitorIfNeededAsync);
     }
 
     private void RunOnAppDispatcher(Func<Task> action)

@@ -48,7 +48,7 @@
                                         <StackPanel>
                                             <TextBlock Text="Dictation" Foreground="{DynamicResource InkBrush}" FontWeight="SemiBold" />
                                             <TextBlock Text="{Binding HotkeyText}" Foreground="{DynamicResource MutedBrush}" FontSize="12" Margin="0,1,0,5" />
-                                            <Button Style="{StaticResource PrimaryButton}" Command="{Binding ToggleListeningCommand}" HorizontalAlignment="Left">
+                                            <Button Style="{StaticResource PrimaryButton}" Command="{Binding ToggleListeningCommand}" IsEnabled="{Binding CanListen}" HorizontalAlignment="Left">
                                                 <StackPanel Orientation="Horizontal">
                                                     <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Text="&#xE720;" Margin="0,0,7,0" />
                                                     <TextBlock Text="{Binding ToggleText}" />
@@ -106,7 +106,7 @@
                                 </Border>
                                 <TextBlock Text="Groq connection" Style="{StaticResource SectionTitle}" />
                                 <TextBlock Text="API key" Style="{StaticResource FieldLabel}" />
-                                <TextBox Text="{Binding ApiKey, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBox x:Name="ApiKeyBox" Text="{Binding ApiKey, UpdateSourceTrigger=PropertyChanged}" />
                                 <WrapPanel>
                                     <Button Style="{StaticResource PrimaryButton}" Command="{Binding TestConnectionCommand}" Content="Test connection" />
                                     <Button Command="{Binding RemoveKeyCommand}" Content="Remove key" />
@@ -138,7 +138,6 @@
                                           DisplayMemberPath="Name" />
                                 <WrapPanel Margin="0,0,0,8">
                                     <Button Command="{Binding RefreshDevicesCommand}" Content="Refresh" />
-                                    <Button Style="{StaticResource PrimaryButton}" Command="{Binding SaveCommand}" Content="Save" />
                                 </WrapPanel>
 
                                 <TextBlock Text="Shortcut" Style="{StaticResource SectionTitle}" />
@@ -174,13 +173,17 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBox x:Name="HotkeyRecorderBox" Text="{Binding HotkeyText, UpdateSourceTrigger=PropertyChanged}" />
-                                    <Button Grid.Column="1" Click="RecordHotkeyButton_OnClick" Margin="7,2,0,5">
-                                        <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Text="&#xE7C8;" />
-                                    </Button>
+                                    <TextBox x:Name="HotkeyRecorderBox"
+                                             Text="{Binding HotkeyText, Mode=OneWay}"
+                                             IsReadOnly="True"
+                                             GotKeyboardFocus="HotkeyRecorderBox_OnGotKeyboardFocus" />
+                                    <Button Grid.Column="1"
+                                            Style="{StaticResource PrimaryButton}"
+                                            Click="SaveHotkeyButton_OnClick"
+                                            Margin="7,2,0,5"
+                                            Content="Save hotkey" />
                                 </Grid>
-                                <TextBlock Text="F13-F24 macro keys can be used without modifiers." Style="{StaticResource BodyText}" />
-                                <Button Style="{StaticResource PrimaryButton}" Command="{Binding SaveCommand}" Content="Save and register" HorizontalAlignment="Left" />
+                                <TextBlock Text="Click the shortcut field, press your shortcut, then save hotkey. F13-F24 macro keys can be used without modifiers." Style="{StaticResource BodyText}" />
                             </StackPanel>
                         </ScrollViewer>
                     </TabItem>
@@ -224,7 +227,6 @@
                                         IsSnapToTickEnabled="False"
                                         Value="{Binding Settings.OverlayOpacity, UpdateSourceTrigger=PropertyChanged}" />
                                 <TextBlock Text="0% hides the box only; the waveform and text stay visible." Style="{StaticResource BodyText}" Margin="0,0,0,5" />
-                                <Button Style="{StaticResource PrimaryButton}" Command="{Binding SaveCommand}" Content="Save" HorizontalAlignment="Left" />
                             </StackPanel>
                         </ScrollViewer>
                     </TabItem>
@@ -245,7 +247,6 @@
                                 <WrapPanel Margin="0,4,0,0">
                                     <Button Command="{Binding ClearHistoryCommand}" Content="Clear history" />
                                     <Button Command="{Binding RemoveKeyCommand}" Content="Remove API key" />
-                                    <Button Style="{StaticResource PrimaryButton}" Command="{Binding SaveCommand}" Content="Save" />
                                 </WrapPanel>
                             </StackPanel>
                         </ScrollViewer>
@@ -264,7 +265,6 @@
                                 <CheckBox Content="Start minimized" IsChecked="{Binding Settings.StartMinimized}" />
                                 <CheckBox Content="Start with Windows" IsChecked="{Binding StartWithWindows}" />
                                 <TextBlock Text="Start with Windows uses the current Windows user startup registry entry." Style="{StaticResource BodyText}" Margin="0,3,0,5" />
-                                <Button Style="{StaticResource PrimaryButton}" Command="{Binding SaveCommand}" Content="Save" HorizontalAlignment="Left" />
                             </StackPanel>
                         </ScrollViewer>
                     </TabItem>

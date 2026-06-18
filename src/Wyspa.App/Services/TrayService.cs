@@ -84,7 +84,7 @@ public sealed class TrayService : IDisposable
 
     private void ViewModelOnPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(MainViewModel.Status) or nameof(MainViewModel.Settings) or nameof(MainViewModel.StartWithWindows))
+        if (e.PropertyName is nameof(MainViewModel.Status) or nameof(MainViewModel.Settings) or nameof(MainViewModel.StartWithWindows) or nameof(MainViewModel.HasApiKey))
         {
             UpdateTrayState();
         }
@@ -107,9 +107,10 @@ public sealed class TrayService : IDisposable
         var isAutoListening = _viewModel.IsAutoCaptureListening;
 
         _toggleItem.Text = isRecording ? "Stop Listening" : "Start Listening";
-        _toggleItem.Enabled = !isAutoMode || isRecording;
+        _toggleItem.Enabled = _viewModel.HasApiKey && (!isAutoMode || isRecording);
 
         _autoCaptureItem.Visible = isAutoMode;
+        _autoCaptureItem.Enabled = _viewModel.HasApiKey;
         _autoCaptureItem.Checked = isAutoListening;
         _autoCaptureItem.Text = isAutoListening ? "AutoCapture listening: On" : "AutoCapture listening: Off";
 

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Navigation;
+using System.Windows.Threading;
 using Wyspa.App.Services;
 using Wyspa.App.ViewModels;
 
@@ -9,6 +10,8 @@ namespace Wyspa.App;
 
 public partial class MainWindow : Window
 {
+    private readonly DispatcherTimer _autoSaveTimer;
+    private bool _isReadyForAutoSave;
     private bool _isRecordingHotkey;
     private ScratchpadWindow? _scratchpadWindow;
     public bool IsDarkMode { get; set; }
@@ -16,6 +19,14 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        _autoSaveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+        _autoSaveTimer.Tick += AutoSaveTimer_OnTick;
+        Loaded += (_, _) => _isReadyForAutoSave = true;
+        AddHandler(System.Windows.Controls.CheckBox.CheckedEvent, new RoutedEventHandler(AutoSaveControl_OnChanged), handledEventsToo: true);
+        AddHandler(System.Windows.Controls.CheckBox.UncheckedEvent, new RoutedEventHandler(AutoSaveControl_OnChanged), handledEventsToo: true);
+        AddHandler(System.Windows.Controls.ComboBox.SelectionChangedEvent, new System.Windows.Controls.SelectionChangedEventHandler(AutoSaveComboBox_OnSelectionChanged), handledEventsToo: true);
+        AddHandler(System.Windows.Controls.Slider.ValueChangedEvent, new RoutedPropertyChangedEventHandler<double>(AutoSaveSlider_OnValueChanged), handledEventsToo: true);
+        AddHandler(System.Windows.Controls.TextBox.LostFocusEvent, new RoutedEventHandler(AutoSaveTextBox_OnLostFocus), handledEventsToo: true);
     }
 
     protected override void OnSourceInitialized(EventArgs e)
@@ -47,12 +58,19 @@ public partial class MainWindow : Window
         _scratchpadWindow.Activate();
     }
 
-    private void RecordHotkeyButton_OnClick(object sender, RoutedEventArgs e)
+    private void HotkeyRecorderBox_OnGotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
     {
         _isRecordingHotkey = true;
         HotkeyRecorderBox.Text = "Press shortcut...";
-        HotkeyRecorderBox.Focus();
-        Keyboard.Focus(HotkeyRecorderBox);
+    }
+
+    private async void SaveHotkeyButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        _isRecordingHotkey = false;
+        if (DataContext is MainViewModel viewModel)
+        {
+            await viewModel.SaveHotkeyAsync();
+        }
     }
 
     private void Window_OnPreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
@@ -81,8 +99,6 @@ public partial class MainWindow : Window
         {
             HotkeyRecorderBox.Text = shortcut;
         }
-
-        _isRecordingHotkey = false;
     }
 
     private static bool IsModifierKey(Key key)
@@ -130,5 +146,51 @@ public partial class MainWindow : Window
             UseShellExecute = true
         });
         e.Handled = true;
+    }
+
+    private void AutoSaveControl_OnChanged(object sender, RoutedEventArgs e)
+    {
+        ScheduleAutoSave();
+    }
+
+    private void AutoSaveComboBox_OnSelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        ScheduleAutoSave();
+    }
+
+    private void AutoSaveSlider_OnValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        ScheduleAutoSave();
+    }
+
+    private void AutoSaveTextBox_OnLostFocus(object sender, RoutedEventArgs e)
+    {
+        if (ReferenceEquals(e.OriginalSource, HotkeyRecorderBox) ||
+            ReferenceEquals(e.OriginalSource, ApiKeyBox))
+        {
+            return;
+        }
+
+        ScheduleAutoSave();
+    }
+
+    private void ScheduleAutoSave()
+    {
+        if (!_isReadyForAutoSave || _isRecordingHotkey)
+        {
+            return;
+        }
+
+        _autoSaveTimer.Stop();
+        _autoSaveTimer.Start();
+    }
+
+    private async void AutoSaveTimer_OnTick(object? sender, EventArgs e)
+    {
+        _autoSaveTimer.Stop();
+        if (DataContext is MainViewModel viewModel)
+        {
+            await viewModel.AutoSaveSettingsAsync();
+        }
     }
 }

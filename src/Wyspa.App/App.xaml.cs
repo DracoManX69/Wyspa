@@ -112,7 +112,7 @@ public partial class App : System.Windows.Application
                 overlayService);
 
             _viewModel = new MainViewModel(settingsService, secretStore, groqClient, _audioCapture, _hotkeyService, startupService, orchestrator);
-            _autoCaptureService = new AutoCaptureService(settingsService, _levelMonitor, _audioCapture, orchestrator, overlayService);
+            _autoCaptureService = new AutoCaptureService(settingsService, secretStore, _levelMonitor, _audioCapture, orchestrator, overlayService);
             _trayService = new TrayService(_viewModel, startupService, ShowMainWindow, QuitAsync);
             overlayService.NotificationRequested += (_, message) => _trayService?.ShowNotification(message);
             _audioCapture.LevelAvailable += (_, level) => Dispatcher.BeginInvoke(() =>

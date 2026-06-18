@@ -46,7 +46,7 @@ public sealed class MainViewModel : ViewModelBase
         _orchestrator = orchestrator;
         Settings = new AppSettings();
         Devices = [];
-        SaveCommand = new AsyncRelayCommand(SaveAsync);
+        SaveCommand = new AsyncRelayCommand(SaveHotkeyAsync);
         TestConnectionCommand = new AsyncRelayCommand(TestConnectionAsync);
         ToggleListeningCommand = new AsyncRelayCommand(ToggleListeningAsync);
         RemoveKeyCommand = new AsyncRelayCommand(RemoveKeyAsync);
@@ -80,7 +80,14 @@ public sealed class MainViewModel : ViewModelBase
     public bool HasApiKey
     {
         get => _hasApiKey;
-        private set => SetProperty(ref _hasApiKey, value);
+        private set
+        {
+            if (SetProperty(ref _hasApiKey, value))
+            {
+                OnPropertyChanged(nameof(IsAutoCaptureListening));
+                OnPropertyChanged(nameof(CanListen));
+            }
+        }
     }
 
     public string ConnectionMessage
@@ -161,8 +168,9 @@ public sealed class MainViewModel : ViewModelBase
     public string ToggleText => Status is DictationState.Listening ? "Stop Listening" : "Start Listening";
     public string ScratchpadButtonText => IsScratchpadRecording ? "Stop test recording" : "Start test recording";
     public string MicrophoneLevelText => $"Live input {MicrophoneLevel:P0}";
+    public bool CanListen => HasApiKey;
     public bool IsAutoCaptureMode => Settings.ActivationMode is ActivationMode.AutoCapture;
-    public bool IsAutoCaptureListening => IsAutoCaptureMode && Settings.AutoCaptureListeningEnabled;
+    public bool IsAutoCaptureListening => HasApiKey && IsAutoCaptureMode && Settings.AutoCaptureListeningEnabled;
 
     public void UpdateMicrophoneLevel(float level)
     {
@@ -189,11 +197,21 @@ public sealed class MainViewModel : ViewModelBase
 
     public async Task ToggleListeningAsync()
     {
+        if (!await EnsureApiKeyAvailableAsync())
+        {
+            return;
+        }
+
         await _orchestrator.ToggleAsync();
     }
 
     public async Task HandleHotkeyPressedAsync()
     {
+        if (!await EnsureApiKeyAvailableAsync())
+        {
+            return;
+        }
+
         var settings = await _settingsService.LoadAsync(CancellationToken.None);
         if (settings.ActivationMode is ActivationMode.AutoCapture)
         {
@@ -213,6 +231,11 @@ public sealed class MainViewModel : ViewModelBase
 
     public async Task HandleHotkeyReleasedAsync()
     {
+        if (!await EnsureApiKeyAvailableAsync())
+        {
+            return;
+        }
+
         var settings = await _settingsService.LoadAsync(CancellationToken.None);
         if (settings.ActivationMode is ActivationMode.HoldToTalk)
         {
@@ -223,8 +246,15 @@ public sealed class MainViewModel : ViewModelBase
     public async Task ToggleAutoCaptureListeningAsync()
     {
         Settings = await _settingsService.LoadAsync(CancellationToken.None);
+        if (!await EnsureApiKeyAvailableAsync())
+        {
+            Settings.AutoCaptureListeningEnabled = false;
+            await AutoSaveSettingsAsync("Add a Groq API key before enabling AutoCapture listening.");
+            return;
+        }
+
         Settings.AutoCaptureListeningEnabled = !Settings.AutoCaptureListeningEnabled;
-        await _settingsService.SaveAsync(Settings, CancellationToken.None);
+        await SaveSettingsCoreAsync(registerHotkey: false, updateMessage: false);
         ConnectionMessage = Settings.AutoCaptureListeningEnabled
             ? "AutoCapture listening is on."
             : "AutoCapture listening is off.";
@@ -342,13 +372,17 @@ public sealed class MainViewModel : ViewModelBase
         }
     }
 
-    private async Task SaveAsync()
+    public async Task AutoSaveSettingsAsync(string? message = null)
     {
-        Settings.OverlayOpacity = Math.Clamp(Settings.OverlayOpacity, 0.0, 1.0);
-        Settings.AutoCaptureThreshold = Math.Clamp(Settings.AutoCaptureThreshold, 0.0f, 1.0f);
-        Settings.AutoCaptureSilenceMs = Math.Clamp(Settings.AutoCaptureSilenceMs, 400, 5000);
-        Settings.AutoCaptureMinSpeechMs = Math.Clamp(Settings.AutoCaptureMinSpeechMs, 250, 3000);
-        Settings.IntentConfidenceThreshold = Math.Clamp(Settings.IntentConfidenceThreshold, 0.1, 0.95);
+        await SaveSettingsCoreAsync(registerHotkey: false, updateMessage: false);
+        if (!string.IsNullOrWhiteSpace(message))
+        {
+            ConnectionMessage = message;
+        }
+    }
+
+    public async Task SaveHotkeyAsync()
+    {
         if (!HotkeyValidator.TryParse(HotkeyText, out var parsedHotkey, out var hotkeyError))
         {
             ConnectionMessage = hotkeyError ?? "Could not read hotkey.";
@@ -357,14 +391,34 @@ public sealed class MainViewModel : ViewModelBase
 
         Settings.Hotkey = parsedHotkey;
         HotkeyText = parsedHotkey.DisplayText;
+        await SaveSettingsCoreAsync(registerHotkey: true, updateMessage: true);
+    }
+
+    private async Task SaveSettingsCoreAsync(bool registerHotkey, bool updateMessage)
+    {
+        Settings.OverlayOpacity = Math.Clamp(Settings.OverlayOpacity, 0.0, 1.0);
+        Settings.AutoCaptureThreshold = Math.Clamp(Settings.AutoCaptureThreshold, 0.0f, 1.0f);
+        Settings.AutoCaptureSilenceMs = Math.Clamp(Settings.AutoCaptureSilenceMs, 400, 5000);
+        Settings.AutoCaptureMinSpeechMs = Math.Clamp(Settings.AutoCaptureMinSpeechMs, 250, 3000);
+        Settings.IntentConfidenceThreshold = Math.Clamp(Settings.IntentConfidenceThreshold, 0.1, 0.95);
+
         _startupService.SetEnabled(StartWithWindows);
         Settings.StartWithWindows = StartWithWindows;
         Settings.FirstRunComplete = true;
         await _settingsService.SaveAsync(Settings, CancellationToken.None);
-        RegisterHotkey();
-        ConnectionMessage = "Settings saved.";
+        if (registerHotkey)
+        {
+            RegisterHotkey();
+        }
+
+        if (updateMessage)
+        {
+            ConnectionMessage = registerHotkey ? "Hotkey saved." : "Settings saved.";
+        }
+
         OnPropertyChanged(nameof(IsAutoCaptureMode));
         OnPropertyChanged(nameof(IsAutoCaptureListening));
+        OnPropertyChanged(nameof(CanListen));
         SettingsSaved?.Invoke(this, EventArgs.Empty);
         AutoCaptureListeningChanged?.Invoke(this, EventArgs.Empty);
     }
@@ -393,15 +447,23 @@ public sealed class MainViewModel : ViewModelBase
             HasApiKey = true;
             Settings.FirstRunComplete = true;
             await _settingsService.SaveAsync(Settings, CancellationToken.None);
+            SettingsSaved?.Invoke(this, EventArgs.Empty);
         }
     }
 
     private async Task RemoveKeyAsync()
     {
+        await _orchestrator.StopIfNeededAsync();
         await _secretStore.RemoveApiKeyAsync(CancellationToken.None);
         HasApiKey = false;
         ApiKey = string.Empty;
+        Settings.AutoCaptureListeningEnabled = false;
+        await _settingsService.SaveAsync(Settings, CancellationToken.None);
         ConnectionMessage = "Groq API key removed from this Windows user profile.";
+        OnPropertyChanged(nameof(Settings));
+        OnPropertyChanged(nameof(IsAutoCaptureListening));
+        SettingsSaved?.Invoke(this, EventArgs.Empty);
+        AutoCaptureListeningChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void RegisterHotkey()
@@ -422,5 +484,17 @@ public sealed class MainViewModel : ViewModelBase
         }
 
         dispatcher.BeginInvoke(action);
+    }
+
+    private async Task<bool> EnsureApiKeyAvailableAsync()
+    {
+        var hasKey = !string.IsNullOrWhiteSpace(await _secretStore.GetApiKeyAsync(CancellationToken.None));
+        HasApiKey = hasKey;
+        if (!hasKey)
+        {
+            ConnectionMessage = "Add a Groq API key before listening.";
+        }
+
+        return hasKey;
     }
 }

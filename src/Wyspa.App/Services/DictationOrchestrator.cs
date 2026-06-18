@@ -17,6 +17,7 @@ public sealed class DictationOrchestrator
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     public DictationState State { get; private set; } = DictationState.Idle;
+    public event EventHandler? ListeningStarting;
     public event EventHandler<DictationState>? StateChanged;
 
     public DictationOrchestrator(
@@ -102,6 +103,14 @@ public sealed class DictationOrchestrator
     private async Task StartAsync(CancellationToken cancellationToken)
     {
         var settings = await _settingsService.LoadAsync(cancellationToken);
+        var apiKey = await _secretStore.GetApiKeyAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            SetState(DictationState.Error, "Add your Groq API key before listening.");
+            return;
+        }
+
+        ListeningStarting?.Invoke(this, EventArgs.Empty);
         _overlay.SetOpacity(settings.OverlayOpacity);
         await _audioCapture.StartRecordingAsync(settings.MicrophoneDeviceId, cancellationToken);
         SetState(DictationState.Listening, "Listening");
