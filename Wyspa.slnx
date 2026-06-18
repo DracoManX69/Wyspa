@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="src/Wyspa.Core/Wyspa.Core.csproj" />
+  <Project Path="src/Wyspa.Infrastructure/Wyspa.Infrastructure.csproj" />
+  <Project Path="src/Wyspa.App/Wyspa.App.csproj" />
+  <Project Path="tests/Wyspa.Tests/Wyspa.Tests.csproj" />
+</Solution>

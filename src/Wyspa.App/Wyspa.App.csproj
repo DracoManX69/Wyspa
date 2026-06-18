@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
+    <Win32Icon>Assets\AppIcon.ico</Win32Icon>
+    <AssemblyName>Wyspa</AssemblyName>
+    <RootNamespace>Wyspa.App</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Wyspa.Core\Wyspa.Core.csproj" />
+    <ProjectReference Include="..\Wyspa.Infrastructure\Wyspa.Infrastructure.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Assets\AppIcon.ico" />
+    <Resource Include="Assets\AppLogo.png" />
+  </ItemGroup>
+</Project>

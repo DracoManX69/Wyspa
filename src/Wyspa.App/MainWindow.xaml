@@ -1,0 +1,275 @@
+<Window x:Class="Wyspa.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:models="clr-namespace:Wyspa.Core.Models;assembly=Wyspa.Core"
+        Title="Wyspa"
+        Icon="Assets/AppIcon.ico"
+        Width="700"
+        Height="520"
+        MinWidth="560"
+        MinHeight="480"
+        PreviewKeyDown="Window_OnPreviewKeyDown"
+        Background="{DynamicResource AppBackgroundBrush}">
+    <Grid Margin="6">
+        <Border Background="{DynamicResource ChromeBrush}"
+                BorderBrush="{DynamicResource LineBrush}"
+                BorderThickness="1"
+                CornerRadius="8"
+                Padding="7">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <Grid Margin="1,0,1,5">
+                    <StackPanel Orientation="Horizontal">
+                        <Image Source="Assets/AppLogo.png" Width="32" Height="32" Margin="0,0,10,0" />
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="Wyspa" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource InkBrush}" />
+                            <TextBlock Text="{Binding ConnectionMessage}" Foreground="{DynamicResource MutedBrush}" FontSize="11.5" TextTrimming="CharacterEllipsis" MaxWidth="430" />
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+
+                <TabControl Grid.Row="1" TabStripPlacement="Left">
+                    <TabItem>
+                        <TabItem.Header>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Text="&#xE80F;" Width="24" FontSize="16" VerticalAlignment="Center" />
+                                <TextBlock Text="Home" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </TabItem.Header>
+                        <ScrollViewer Padding="8">
+                            <StackPanel MaxWidth="420" HorizontalAlignment="Left">
+                                    <TextBlock Text="Control center" Style="{StaticResource SectionTitle}" />
+                                    <TextBlock Text="Start dictation and check your current setup." Style="{StaticResource BodyText}" Margin="0,0,0,5" />
+                                    <Border Style="{StaticResource Card}" Margin="0,0,0,7">
+                                        <StackPanel>
+                                            <TextBlock Text="Dictation" Foreground="{DynamicResource InkBrush}" FontWeight="SemiBold" />
+                                            <TextBlock Text="{Binding HotkeyText}" Foreground="{DynamicResource MutedBrush}" FontSize="12" Margin="0,1,0,5" />
+                                            <Button Style="{StaticResource PrimaryButton}" Command="{Binding ToggleListeningCommand}" HorizontalAlignment="Left">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Text="&#xE720;" Margin="0,0,7,0" />
+                                                    <TextBlock Text="{Binding ToggleText}" />
+                                                </StackPanel>
+                                            </Button>
+                                        </StackPanel>
+                                    </Border>
+                                    <Border Style="{StaticResource Card}" Margin="0,0,0,7">
+                                        <StackPanel>
+                                            <TextBlock Text="Groq setup" Foreground="{DynamicResource InkBrush}" FontWeight="SemiBold" />
+                                            <TextBlock Text="Create an API key, paste it in Groq, then test the connection." Style="{StaticResource BodyText}" Margin="0,2,0,4" />
+                                            <TextBlock Style="{StaticResource BodyText}">
+                                                <Hyperlink NavigateUri="https://groq.com/" RequestNavigate="Hyperlink_OnRequestNavigate">Groq website</Hyperlink>
+                                                <Run Text="  |  " />
+                                                <Hyperlink NavigateUri="https://console.groq.com/keys" RequestNavigate="Hyperlink_OnRequestNavigate">API keys</Hyperlink>
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </Border>
+                                    <Border Style="{StaticResource Card}">
+                                        <StackPanel>
+                                            <TextBlock Text="Scratchpad" Foreground="{DynamicResource InkBrush}" FontWeight="SemiBold" />
+                                            <TextBlock Text="Open a compact test pad for Groq transcription without inserting text." Style="{StaticResource BodyText}" Margin="0,2,0,5" />
+                                            <Button Style="{StaticResource PrimaryButton}" Click="OpenScratchpadButton_OnClick" HorizontalAlignment="Left">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Text="&#xE9A1;" Margin="0,0,7,0" />
+                                                    <TextBlock Text="Open scratchpad" />
+                                                </StackPanel>
+                                            </Button>
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
+
+                    <TabItem>
+                        <TabItem.Header>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Text="&#xE753;" Width="24" FontSize="16" VerticalAlignment="Center" />
+                                <TextBlock Text="Groq" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </TabItem.Header>
+                        <ScrollViewer Padding="8">
+                            <StackPanel MaxWidth="430" HorizontalAlignment="Left">
+                                <Border Style="{StaticResource Card}" Margin="0,0,0,7">
+                                    <StackPanel>
+                                        <TextBlock Text="Get an API key" Foreground="{DynamicResource InkBrush}" FontWeight="SemiBold" />
+                                        <TextBlock Style="{StaticResource BodyText}" Margin="0,3,0,0">
+                                            <Run Text="Open " />
+                                            <Hyperlink NavigateUri="https://groq.com/" RequestNavigate="Hyperlink_OnRequestNavigate">Groq</Hyperlink>
+                                            <Run Text=" or " />
+                                            <Hyperlink NavigateUri="https://console.groq.com/keys" RequestNavigate="Hyperlink_OnRequestNavigate">API Keys</Hyperlink>
+                                            <Run Text=", sign in, create a key, copy it, paste it here, then test connection." />
+                                        </TextBlock>
+                                    </StackPanel>
+                                </Border>
+                                <TextBlock Text="Groq connection" Style="{StaticResource SectionTitle}" />
+                                <TextBlock Text="API key" Style="{StaticResource FieldLabel}" />
+                                <TextBox Text="{Binding ApiKey, UpdateSourceTrigger=PropertyChanged}" />
+                                <WrapPanel>
+                                    <Button Style="{StaticResource PrimaryButton}" Command="{Binding TestConnectionCommand}" Content="Test connection" />
+                                    <Button Command="{Binding RemoveKeyCommand}" Content="Remove key" />
+                                </WrapPanel>
+                                <TextBlock Text="{Binding ConnectionMessage}" Style="{StaticResource BodyText}" />
+                                <TextBlock Text="Model" Style="{StaticResource FieldLabel}" />
+                                <TextBox Text="{Binding Settings.ModelId, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="Language" Style="{StaticResource FieldLabel}" />
+                                <TextBox Text="{Binding Settings.Language, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="Vocabulary prompt" Style="{StaticResource FieldLabel}" />
+                                <TextBox Text="{Binding Settings.CustomPrompt, UpdateSourceTrigger=PropertyChanged}" MaxLength="500" AcceptsReturn="True" Height="48" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
+
+                    <TabItem>
+                        <TabItem.Header>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Text="&#xE720;" Width="24" FontSize="16" VerticalAlignment="Center" />
+                                <TextBlock Text="Input" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </TabItem.Header>
+                        <ScrollViewer Padding="8">
+                            <StackPanel MaxWidth="560" HorizontalAlignment="Left">
+                                <TextBlock Text="Microphone" Style="{StaticResource SectionTitle}" />
+                                <ComboBox ItemsSource="{Binding Devices}"
+                                          SelectedValue="{Binding Settings.MicrophoneDeviceId, UpdateSourceTrigger=PropertyChanged}"
+                                          SelectedValuePath="Id"
+                                          DisplayMemberPath="Name" />
+                                <WrapPanel Margin="0,0,0,8">
+                                    <Button Command="{Binding RefreshDevicesCommand}" Content="Refresh" />
+                                    <Button Style="{StaticResource PrimaryButton}" Command="{Binding SaveCommand}" Content="Save" />
+                                </WrapPanel>
+
+                                <TextBlock Text="Shortcut" Style="{StaticResource SectionTitle}" />
+                                <TextBlock Text="Mode" Style="{StaticResource FieldLabel}" />
+                                <ComboBox SelectedValue="{Binding Settings.ActivationMode}" SelectedValuePath="Tag">
+                                    <ComboBoxItem Content="Toggle" Tag="{x:Static models:ActivationMode.Toggle}" />
+                                    <ComboBoxItem Content="Hold to talk" Tag="{x:Static models:ActivationMode.HoldToTalk}" />
+                                    <ComboBoxItem Content="AutoCapture" Tag="{x:Static models:ActivationMode.AutoCapture}" />
+                                </ComboBox>
+                                <TextBlock Text="AutoCapture calibration" Style="{StaticResource FieldLabel}" />
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{Binding MicrophoneLevelText}" Style="{StaticResource BodyText}" />
+                                    <TextBlock Grid.Column="1"
+                                               Style="{StaticResource BodyText}"
+                                               Text="{Binding Value, ElementName=AutoCaptureThresholdSlider, StringFormat=Trigger {0:P0}}" />
+                                </Grid>
+                                <ProgressBar Minimum="0" Maximum="1" Value="{Binding MicrophoneLevel, Mode=OneWay}" Height="8" Margin="0,2,0,4" />
+                                <Slider x:Name="AutoCaptureThresholdSlider"
+                                        Minimum="0"
+                                        Maximum="1"
+                                        TickFrequency="0.01"
+                                        Value="{Binding Settings.AutoCaptureThreshold, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="Silence before stop (ms)" Style="{StaticResource FieldLabel}" />
+                                <TextBox Text="{Binding Settings.AutoCaptureSilenceMs, UpdateSourceTrigger=PropertyChanged}" />
+                                <CheckBox Content="AutoCapture listening enabled" IsChecked="{Binding Settings.AutoCaptureListeningEnabled}" />
+                                <TextBlock Text="Current shortcut" Style="{StaticResource FieldLabel}" />
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox x:Name="HotkeyRecorderBox" Text="{Binding HotkeyText, UpdateSourceTrigger=PropertyChanged}" />
+                                    <Button Grid.Column="1" Click="RecordHotkeyButton_OnClick" Margin="7,2,0,5">
+                                        <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Text="&#xE7C8;" />
+                                    </Button>
+                                </Grid>
+                                <TextBlock Text="F13-F24 macro keys can be used without modifiers." Style="{StaticResource BodyText}" />
+                                <Button Style="{StaticResource PrimaryButton}" Command="{Binding SaveCommand}" Content="Save and register" HorizontalAlignment="Left" />
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
+
+                    <TabItem>
+                        <TabItem.Header>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Text="&#xE9D2;" Width="24" FontSize="16" VerticalAlignment="Center" />
+                                <TextBlock Text="Behavior" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </TabItem.Header>
+                        <ScrollViewer Padding="8">
+                            <StackPanel MaxWidth="560" HorizontalAlignment="Left">
+                                <TextBlock Text="Dictation" Style="{StaticResource SectionTitle}" />
+                                <CheckBox Content="Clean up transcripts" IsChecked="{Binding Settings.CleanupEnabled}" />
+                                <CheckBox Content="Convert spoken punctuation" IsChecked="{Binding Settings.SpokenPunctuationEnabled}" />
+                                <TextBlock Text="Insertion mode" Style="{StaticResource FieldLabel}" />
+                                <ComboBox SelectedValue="{Binding Settings.InsertionMode}" SelectedValuePath="Tag">
+                                    <ComboBoxItem Content="Paste with clipboard restore" Tag="{x:Static models:InsertionMode.Paste}" />
+                                    <ComboBoxItem Content="Type characters" Tag="{x:Static models:InsertionMode.Type}" />
+                                </ComboBox>
+                                <CheckBox Content="Enable spoken commands and Groq intent actions" IsChecked="{Binding Settings.IntentActionsEnabled}" />
+                                <TextBlock Text="Intent model" Style="{StaticResource FieldLabel}" />
+                                <TextBox Text="{Binding Settings.IntentModelId, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="Action confidence threshold" Style="{StaticResource FieldLabel}" />
+                                <Slider Minimum="0.1"
+                                        Maximum="0.95"
+                                        TickFrequency="0.05"
+                                        IsSnapToTickEnabled="False"
+                                        Value="{Binding Settings.IntentConfidenceThreshold, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="Allowed actions: copy, paste, cut, select all, undo, redo, Enter, Tab, Escape, Backspace, Delete, Task View." Style="{StaticResource BodyText}" Margin="0,0,0,5" />
+
+                                <TextBlock Text="Overlay" Style="{StaticResource SectionTitle}" Margin="0,8,0,4" />
+                                <TextBlock Text="Overlay background opacity" Style="{StaticResource FieldLabel}" />
+                                <TextBlock Style="{StaticResource BodyText}"
+                                           Text="{Binding Value, ElementName=OverlayOpacitySlider, StringFormat=Background {0:P0}}" />
+                                <Slider x:Name="OverlayOpacitySlider"
+                                        Minimum="0"
+                                        Maximum="1"
+                                        TickFrequency="0.05"
+                                        IsSnapToTickEnabled="False"
+                                        Value="{Binding Settings.OverlayOpacity, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="0% hides the box only; the waveform and text stay visible." Style="{StaticResource BodyText}" Margin="0,0,0,5" />
+                                <Button Style="{StaticResource PrimaryButton}" Command="{Binding SaveCommand}" Content="Save" HorizontalAlignment="Left" />
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
+
+                    <TabItem>
+                        <TabItem.Header>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Text="&#xE72E;" Width="24" FontSize="16" VerticalAlignment="Center" />
+                                <TextBlock Text="Privacy" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </TabItem.Header>
+                        <ScrollViewer Padding="8">
+                            <StackPanel MaxWidth="520" HorizontalAlignment="Left">
+                                <TextBlock Text="Privacy" Style="{StaticResource SectionTitle}" />
+                                <TextBlock Text="Wyspa sends microphone audio, model ID, and optional language/prompt to Groq. It does not take screenshots, capture active-window context, log transcripts, or keep raw audio by default." Style="{StaticResource BodyText}" Margin="0,0,0,5" />
+                                <CheckBox Content="Keep local transcript history" IsChecked="{Binding Settings.HistoryEnabled}" />
+                                <CheckBox Content="Retain raw audio for debugging" IsChecked="{Binding Settings.RetainAudioForDebugging}" />
+                                <WrapPanel Margin="0,4,0,0">
+                                    <Button Command="{Binding ClearHistoryCommand}" Content="Clear history" />
+                                    <Button Command="{Binding RemoveKeyCommand}" Content="Remove API key" />
+                                    <Button Style="{StaticResource PrimaryButton}" Command="{Binding SaveCommand}" Content="Save" />
+                                </WrapPanel>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
+
+                    <TabItem>
+                        <TabItem.Header>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Text="&#xE7F4;" Width="24" FontSize="16" VerticalAlignment="Center" />
+                                <TextBlock Text="System" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </TabItem.Header>
+                        <ScrollViewer Padding="8">
+                            <StackPanel MaxWidth="520" HorizontalAlignment="Left">
+                                <TextBlock Text="Startup" Style="{StaticResource SectionTitle}" />
+                                <CheckBox Content="Start minimized" IsChecked="{Binding Settings.StartMinimized}" />
+                                <CheckBox Content="Start with Windows" IsChecked="{Binding StartWithWindows}" />
+                                <TextBlock Text="Start with Windows uses the current Windows user startup registry entry." Style="{StaticResource BodyText}" Margin="0,3,0,5" />
+                                <Button Style="{StaticResource PrimaryButton}" Command="{Binding SaveCommand}" Content="Save" HorizontalAlignment="Left" />
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
+                </TabControl>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

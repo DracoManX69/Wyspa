@@ -1,0 +1,47 @@
+<Window x:Class="Wyspa.App.ScratchpadWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Wyspa Scratchpad"
+        Icon="Assets/AppIcon.ico"
+        Width="460"
+        Height="360"
+        MinWidth="360"
+        MinHeight="280"
+        Background="{DynamicResource AppBackgroundBrush}">
+    <Grid Margin="10">
+        <Border Background="{DynamicResource ChromeBrush}"
+                BorderBrush="{DynamicResource LineBrush}"
+                BorderThickness="1"
+                CornerRadius="8"
+                Padding="10">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock Text="Scratchpad" Style="{StaticResource SectionTitle}" />
+                        <TextBlock Text="{Binding ScratchpadStatus}" Style="{StaticResource BodyText}" />
+                    </StackPanel>
+                    <Button Grid.Column="1" Style="{StaticResource PrimaryButton}" Command="{Binding ScratchpadCommand}" VerticalAlignment="Top">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Text="&#xE9A1;" Margin="0,0,7,0" />
+                            <TextBlock Text="{Binding ScratchpadButtonText}" />
+                        </StackPanel>
+                    </Button>
+                </Grid>
+                <TextBox Grid.Row="1"
+                         Text="{Binding ScratchpadText, UpdateSourceTrigger=PropertyChanged}"
+                         AcceptsReturn="True"
+                         TextWrapping="Wrap"
+                         VerticalScrollBarVisibility="Hidden"
+                         Margin="0,8,0,0" />
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
