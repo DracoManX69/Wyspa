@@ -19,7 +19,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        _autoSaveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+        _autoSaveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(120) };
         _autoSaveTimer.Tick += AutoSaveTimer_OnTick;
         Loaded += (_, _) => _isReadyForAutoSave = true;
         AddHandler(System.Windows.Controls.CheckBox.CheckedEvent, new RoutedEventHandler(AutoSaveControl_OnChanged), handledEventsToo: true);
@@ -150,17 +150,17 @@ public partial class MainWindow : Window
 
     private void AutoSaveControl_OnChanged(object sender, RoutedEventArgs e)
     {
-        ScheduleAutoSave();
+        QueueSettingsChange(saveImmediately: true);
     }
 
     private void AutoSaveComboBox_OnSelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
     {
-        ScheduleAutoSave();
+        QueueSettingsChange(saveImmediately: true);
     }
 
     private void AutoSaveSlider_OnValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        ScheduleAutoSave();
+        QueueSettingsChange(saveImmediately: false);
     }
 
     private void AutoSaveTextBox_OnLostFocus(object sender, RoutedEventArgs e)
@@ -171,16 +171,37 @@ public partial class MainWindow : Window
             return;
         }
 
-        ScheduleAutoSave();
+        QueueSettingsChange(saveImmediately: true);
     }
 
-    private void ScheduleAutoSave()
+    private void QueueSettingsChange(bool saveImmediately)
     {
         if (!_isReadyForAutoSave || _isRecordingHotkey)
         {
             return;
         }
 
+        Dispatcher.BeginInvoke(new Action(async () =>
+        {
+            if (DataContext is not MainViewModel viewModel || _isRecordingHotkey)
+            {
+                return;
+            }
+
+            viewModel.ApplyLiveSettings();
+            if (saveImmediately)
+            {
+                _autoSaveTimer.Stop();
+                await viewModel.AutoSaveSettingsAsync();
+                return;
+            }
+
+            ScheduleAutoSave();
+        }), DispatcherPriority.Background);
+    }
+
+    private void ScheduleAutoSave()
+    {
         _autoSaveTimer.Stop();
         _autoSaveTimer.Start();
     }

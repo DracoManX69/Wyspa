@@ -58,6 +58,7 @@ public sealed class MainViewModel : ViewModelBase
     }
 
     public event EventHandler? SettingsSaved;
+    public event EventHandler? SettingsChanged;
     public event EventHandler? AutoCaptureListeningChanged;
     public event EventHandler? StartupSettingChanged;
 
@@ -212,14 +213,13 @@ public sealed class MainViewModel : ViewModelBase
             return;
         }
 
-        var settings = await _settingsService.LoadAsync(CancellationToken.None);
-        if (settings.ActivationMode is ActivationMode.AutoCapture)
+        if (Settings.ActivationMode is ActivationMode.AutoCapture)
         {
             await ToggleAutoCaptureListeningAsync();
             return;
         }
 
-        if (settings.ActivationMode is ActivationMode.HoldToTalk)
+        if (Settings.ActivationMode is ActivationMode.HoldToTalk)
         {
             await _orchestrator.StartListeningAsync();
         }
@@ -236,8 +236,7 @@ public sealed class MainViewModel : ViewModelBase
             return;
         }
 
-        var settings = await _settingsService.LoadAsync(CancellationToken.None);
-        if (settings.ActivationMode is ActivationMode.HoldToTalk)
+        if (Settings.ActivationMode is ActivationMode.HoldToTalk)
         {
             await _orchestrator.StopListeningAndTranscribeAsync();
         }
@@ -245,7 +244,6 @@ public sealed class MainViewModel : ViewModelBase
 
     public async Task ToggleAutoCaptureListeningAsync()
     {
-        Settings = await _settingsService.LoadAsync(CancellationToken.None);
         if (!await EnsureApiKeyAvailableAsync())
         {
             Settings.AutoCaptureListeningEnabled = false;
@@ -261,6 +259,7 @@ public sealed class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(Settings));
         OnPropertyChanged(nameof(IsAutoCaptureMode));
         OnPropertyChanged(nameof(IsAutoCaptureListening));
+        SettingsChanged?.Invoke(this, EventArgs.Empty);
         SettingsSaved?.Invoke(this, EventArgs.Empty);
         AutoCaptureListeningChanged?.Invoke(this, EventArgs.Empty);
     }
@@ -274,6 +273,7 @@ public sealed class MainViewModel : ViewModelBase
         await _settingsService.SaveAsync(Settings, CancellationToken.None);
         ConnectionMessage = enabled ? "Start with Windows is on." : "Start with Windows is off.";
         OnPropertyChanged(nameof(Settings));
+        SettingsChanged?.Invoke(this, EventArgs.Empty);
         SettingsSaved?.Invoke(this, EventArgs.Empty);
         StartupSettingChanged?.Invoke(this, EventArgs.Empty);
     }
@@ -394,13 +394,19 @@ public sealed class MainViewModel : ViewModelBase
         await SaveSettingsCoreAsync(registerHotkey: true, updateMessage: true);
     }
 
+    public void ApplyLiveSettings()
+    {
+        ClampSettings();
+        OnPropertyChanged(nameof(IsAutoCaptureMode));
+        OnPropertyChanged(nameof(IsAutoCaptureListening));
+        OnPropertyChanged(nameof(CanListen));
+        SettingsChanged?.Invoke(this, EventArgs.Empty);
+        AutoCaptureListeningChanged?.Invoke(this, EventArgs.Empty);
+    }
+
     private async Task SaveSettingsCoreAsync(bool registerHotkey, bool updateMessage)
     {
-        Settings.OverlayOpacity = Math.Clamp(Settings.OverlayOpacity, 0.0, 1.0);
-        Settings.AutoCaptureThreshold = Math.Clamp(Settings.AutoCaptureThreshold, 0.0f, 1.0f);
-        Settings.AutoCaptureSilenceMs = Math.Clamp(Settings.AutoCaptureSilenceMs, 400, 5000);
-        Settings.AutoCaptureMinSpeechMs = Math.Clamp(Settings.AutoCaptureMinSpeechMs, 250, 3000);
-        Settings.IntentConfidenceThreshold = Math.Clamp(Settings.IntentConfidenceThreshold, 0.1, 0.95);
+        ClampSettings();
 
         _startupService.SetEnabled(StartWithWindows);
         Settings.StartWithWindows = StartWithWindows;
@@ -419,8 +425,18 @@ public sealed class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsAutoCaptureMode));
         OnPropertyChanged(nameof(IsAutoCaptureListening));
         OnPropertyChanged(nameof(CanListen));
+        SettingsChanged?.Invoke(this, EventArgs.Empty);
         SettingsSaved?.Invoke(this, EventArgs.Empty);
         AutoCaptureListeningChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void ClampSettings()
+    {
+        Settings.OverlayOpacity = Math.Clamp(Settings.OverlayOpacity, 0.0, 1.0);
+        Settings.AutoCaptureThreshold = Math.Clamp(Settings.AutoCaptureThreshold, 0.0f, 1.0f);
+        Settings.AutoCaptureSilenceMs = Math.Clamp(Settings.AutoCaptureSilenceMs, 400, 5000);
+        Settings.AutoCaptureMinSpeechMs = Math.Clamp(Settings.AutoCaptureMinSpeechMs, 250, 3000);
+        Settings.IntentConfidenceThreshold = Math.Clamp(Settings.IntentConfidenceThreshold, 0.1, 0.95);
     }
 
     private async Task TestConnectionAsync()
@@ -447,6 +463,7 @@ public sealed class MainViewModel : ViewModelBase
             HasApiKey = true;
             Settings.FirstRunComplete = true;
             await _settingsService.SaveAsync(Settings, CancellationToken.None);
+            SettingsChanged?.Invoke(this, EventArgs.Empty);
             SettingsSaved?.Invoke(this, EventArgs.Empty);
         }
     }
@@ -462,6 +479,7 @@ public sealed class MainViewModel : ViewModelBase
         ConnectionMessage = "Groq API key removed from this Windows user profile.";
         OnPropertyChanged(nameof(Settings));
         OnPropertyChanged(nameof(IsAutoCaptureListening));
+        SettingsChanged?.Invoke(this, EventArgs.Empty);
         SettingsSaved?.Invoke(this, EventArgs.Empty);
         AutoCaptureListeningChanged?.Invoke(this, EventArgs.Empty);
     }

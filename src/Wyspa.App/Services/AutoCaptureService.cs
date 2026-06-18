@@ -13,12 +13,14 @@ public sealed class AutoCaptureService : IDisposable
     private readonly DictationOrchestrator _orchestrator;
     private readonly OverlayStatusService _overlay;
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly object _settingsLock = new();
     private readonly Dispatcher _dispatcher;
     private AppSettings _settings = new();
     private DateTimeOffset _lastVoiceAt;
     private DateTimeOffset _recordingStartedAt;
     private DateTimeOffset _cooldownUntil;
     private string? _monitorDeviceId;
+    private bool _hasApiKey;
     private bool _isStarting;
     private bool _isStopping;
 
@@ -45,15 +47,31 @@ public sealed class AutoCaptureService : IDisposable
 
     public async Task RefreshAsync(CancellationToken cancellationToken = default)
     {
-        _settings = await _settingsService.LoadAsync(cancellationToken);
-        if (!_audioCapture.IsRecording)
+        var settings = await _settingsService.LoadAsync(cancellationToken);
+        var hasApiKey = !string.IsNullOrWhiteSpace(await _secretStore.GetApiKeyAsync(cancellationToken));
+        await ApplySettingsAsync(settings, hasApiKey, cancellationToken);
+    }
+
+    public async Task ApplySettingsAsync(AppSettings settings, bool hasApiKey, CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
         {
-            if (!_monitor.IsRunning || !string.Equals(_monitorDeviceId, _settings.MicrophoneDeviceId, StringComparison.Ordinal))
+            SetSettings(settings, hasApiKey);
+            _overlay.SetOpacity(settings.OverlayOpacity);
+            if (!_audioCapture.IsRecording)
             {
-                _monitor.Stop();
-                _monitorDeviceId = _settings.MicrophoneDeviceId;
-                await _monitor.StartAsync(_settings.MicrophoneDeviceId, cancellationToken);
+                if (!_monitor.IsRunning || !string.Equals(_monitorDeviceId, settings.MicrophoneDeviceId, StringComparison.Ordinal))
+                {
+                    _monitor.Stop();
+                    _monitorDeviceId = settings.MicrophoneDeviceId;
+                    await _monitor.StartAsync(settings.MicrophoneDeviceId, cancellationToken);
+                }
             }
+        }
+        finally
+        {
+            _gate.Release();
         }
     }
 
@@ -70,14 +88,16 @@ public sealed class AutoCaptureService : IDisposable
     private void OnMonitorLevel(object? sender, float level)
     {
         _overlay.UpdateLevel(level);
+        var settings = GetSettingsSnapshot();
         var now = DateTimeOffset.UtcNow;
-        if (_settings.ActivationMode is not ActivationMode.AutoCapture ||
-            !_settings.AutoCaptureListeningEnabled ||
+        if (settings.ActivationMode is not ActivationMode.AutoCapture ||
+            !settings.AutoCaptureListeningEnabled ||
+            !_hasApiKey ||
             _audioCapture.IsRecording ||
             _isStarting ||
             _isStopping ||
             now < _cooldownUntil ||
-            level < _settings.AutoCaptureThreshold)
+            level < settings.AutoCaptureThreshold)
         {
             return;
         }
@@ -87,12 +107,13 @@ public sealed class AutoCaptureService : IDisposable
 
     private void OnRecordingLevel(object? sender, float level)
     {
-        if (_settings.ActivationMode is not ActivationMode.AutoCapture || !_audioCapture.IsRecording)
+        var settings = GetSettingsSnapshot();
+        if (settings.ActivationMode is not ActivationMode.AutoCapture || !_audioCapture.IsRecording)
         {
             return;
         }
 
-        if (level >= _settings.AutoCaptureThreshold * 0.65f)
+        if (level >= settings.AutoCaptureThreshold * 0.65f)
         {
             _lastVoiceAt = DateTimeOffset.UtcNow;
             return;
@@ -100,8 +121,8 @@ public sealed class AutoCaptureService : IDisposable
 
         var now = DateTimeOffset.UtcNow;
         if (!_isStopping &&
-            now - _lastVoiceAt >= TimeSpan.FromMilliseconds(_settings.AutoCaptureSilenceMs) &&
-            now - _recordingStartedAt >= TimeSpan.FromMilliseconds(_settings.AutoCaptureMinSpeechMs))
+            now - _lastVoiceAt >= TimeSpan.FromMilliseconds(settings.AutoCaptureSilenceMs) &&
+            now - _recordingStartedAt >= TimeSpan.FromMilliseconds(settings.AutoCaptureMinSpeechMs))
         {
             RunOnAppDispatcher(StopCaptureAsync);
         }
@@ -112,11 +133,13 @@ public sealed class AutoCaptureService : IDisposable
         await _gate.WaitAsync();
         try
         {
+            var settings = GetSettingsSnapshot();
             if (_audioCapture.IsRecording ||
                 _isStarting ||
                 _isStopping ||
-                _settings.ActivationMode is not ActivationMode.AutoCapture ||
-                !_settings.AutoCaptureListeningEnabled ||
+                settings.ActivationMode is not ActivationMode.AutoCapture ||
+                !settings.AutoCaptureListeningEnabled ||
+                !_hasApiKey ||
                 DateTimeOffset.UtcNow < _cooldownUntil)
             {
                 return;
@@ -166,7 +189,7 @@ public sealed class AutoCaptureService : IDisposable
 
     private async Task RestartMonitorIfNeededAsync()
     {
-        _settings = await _settingsService.LoadAsync(CancellationToken.None);
+        var settings = GetSettingsSnapshot();
         if (_audioCapture.IsRecording)
         {
             return;
@@ -175,8 +198,8 @@ public sealed class AutoCaptureService : IDisposable
         await Task.Delay(200);
         if (!_monitor.IsRunning)
         {
-            _monitorDeviceId = _settings.MicrophoneDeviceId;
-            await _monitor.StartAsync(_settings.MicrophoneDeviceId, CancellationToken.None);
+            _monitorDeviceId = settings.MicrophoneDeviceId;
+            await _monitor.StartAsync(settings.MicrophoneDeviceId, CancellationToken.None);
         }
     }
 
@@ -217,4 +240,47 @@ public sealed class AutoCaptureService : IDisposable
             CrashLogService.Log(ex);
         }
     }
+
+    private AppSettings GetSettingsSnapshot()
+    {
+        lock (_settingsLock)
+        {
+            return _settings;
+        }
+    }
+
+    private void SetSettings(AppSettings settings, bool hasApiKey)
+    {
+        lock (_settingsLock)
+        {
+            _settings = CopySettings(settings);
+            _hasApiKey = hasApiKey;
+        }
+    }
+
+    private static AppSettings CopySettings(AppSettings settings) => new()
+    {
+        FirstRunComplete = settings.FirstRunComplete,
+        MicrophoneDeviceId = settings.MicrophoneDeviceId,
+        Hotkey = settings.Hotkey,
+        ActivationMode = settings.ActivationMode,
+        ModelId = settings.ModelId,
+        Language = settings.Language,
+        CustomPrompt = settings.CustomPrompt,
+        StartMinimized = settings.StartMinimized,
+        StartWithWindows = settings.StartWithWindows,
+        InsertionMode = settings.InsertionMode,
+        CleanupEnabled = settings.CleanupEnabled,
+        SpokenPunctuationEnabled = settings.SpokenPunctuationEnabled,
+        IntentActionsEnabled = settings.IntentActionsEnabled,
+        IntentModelId = settings.IntentModelId,
+        IntentConfidenceThreshold = settings.IntentConfidenceThreshold,
+        HistoryEnabled = settings.HistoryEnabled,
+        RetainAudioForDebugging = settings.RetainAudioForDebugging,
+        OverlayOpacity = settings.OverlayOpacity,
+        AutoCaptureThreshold = settings.AutoCaptureThreshold,
+        AutoCaptureSilenceMs = settings.AutoCaptureSilenceMs,
+        AutoCaptureMinSpeechMs = settings.AutoCaptureMinSpeechMs,
+        AutoCaptureListeningEnabled = settings.AutoCaptureListeningEnabled
+    };
 }

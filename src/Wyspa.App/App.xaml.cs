@@ -127,7 +127,7 @@ public partial class App : System.Windows.Application
             });
             _hotkeyService.Pressed += async (_, _) => await _viewModel.HandleHotkeyPressedAsync();
             _hotkeyService.Released += async (_, _) => await _viewModel.HandleHotkeyReleasedAsync();
-            _viewModel.SettingsSaved += async (_, _) => await _autoCaptureService.RefreshAsync();
+            _viewModel.SettingsChanged += (_, _) => _ = ApplyLiveSettingsAsync(overlayService);
 
             await _viewModel.InitializeAsync();
             await _autoCaptureService.RefreshAsync();
@@ -182,6 +182,24 @@ public partial class App : System.Windows.Application
         _mainWindow.Show();
         _mainWindow.WindowState = WindowState.Normal;
         _mainWindow.Activate();
+    }
+
+    private async Task ApplyLiveSettingsAsync(OverlayStatusService overlayService)
+    {
+        if (_viewModel is null || _autoCaptureService is null)
+        {
+            return;
+        }
+
+        try
+        {
+            overlayService.SetOpacity(_viewModel.Settings.OverlayOpacity);
+            await _autoCaptureService.ApplySettingsAsync(_viewModel.Settings, _viewModel.HasApiKey);
+        }
+        catch (Exception ex)
+        {
+            CrashLogService.Log(ex);
+        }
     }
 
     private async Task QuitAsync()
