@@ -27,4 +27,38 @@ public sealed class JsonSettingsServiceTests
         Assert.Equal("F8", loaded.Hotkey.Key);
         Assert.Equal(HotkeyModifiers.Control | HotkeyModifiers.Shift, loaded.Hotkey.Modifiers);
     }
+
+    [Fact]
+    public async Task ConcurrentAccess_ToSamePath_DoesNotThrow()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "Wyspa.Tests", Guid.NewGuid().ToString("N"), "settings.json");
+        var reader = new JsonSettingsService(path);
+        var writer = new JsonSettingsService(path);
+        var initialSettings = new AppSettings { FirstRunComplete = true, Language = "en" };
+
+        await writer.SaveAsync(initialSettings, CancellationToken.None);
+
+        var tasks = Enumerable.Range(0, 20).Select(async index =>
+        {
+            if (index % 2 == 0)
+            {
+                await writer.SaveAsync(new AppSettings
+                {
+                    FirstRunComplete = true,
+                    Language = "en",
+                    StartMinimized = index % 4 == 0
+                }, CancellationToken.None);
+            }
+            else
+            {
+                _ = await reader.LoadAsync(CancellationToken.None);
+            }
+        });
+
+        await Task.WhenAll(tasks);
+        var loaded = await reader.LoadAsync(CancellationToken.None);
+
+        Assert.True(loaded.FirstRunComplete);
+        Assert.Equal("en", loaded.Language);
+    }
 }

@@ -11,7 +11,7 @@ Wyspa and this installer documentation were written and produced with AI assista
 The installer build creates:
 
 ```text
-artifacts\installer\WyspaSetup-0.4.1-win-x64.exe
+artifacts\installer\WyspaSetup-0.4.2-win-x64.exe
 ```
 
 This setup executable contains the Wyspa app files. It does not bundle the Microsoft .NET runtime.
@@ -136,7 +136,7 @@ Before publishing a GitHub release:
 
 - Run `.\scripts\test.ps1`.
 - Run `.\scripts\installer.ps1`.
-- Confirm `artifacts\installer\WyspaSetup-0.4.1-win-x64.exe` exists.
+- Confirm `artifacts\installer\WyspaSetup-0.4.2-win-x64.exe` exists.
 - Confirm the installer opens normally on Windows.
 - Install Wyspa, launch it, then uninstall it while the tray app is running.
 - Confirm uninstall closes Wyspa and removes installed files.
