@@ -4,9 +4,9 @@ Wyspa is a lightweight Windows dictation app. It runs in the system tray, record
 
 Wyspa is designed for people who want fast speech-to-text without a heavyweight desktop client. Transcription is handled by Groq, so the local app stays small.
 
-## AI Disclosure
+## 🚨 VIBE CODE ALERT 🚨
 
-Wyspa was written and produced with AI assistance from Codex. Review the code, installer, and release artifacts before using it in sensitive or production environments.
+Wyspa was written effectively entirely by Codex with some cleaver interfacing with the app to get it to work pretty well. This vibe code disclosure is basically the only thing human authored. Codex did the rest of this repo too :)
 
 ## Features
 
