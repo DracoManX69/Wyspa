@@ -15,11 +15,13 @@ public sealed class MainViewModel : ViewModelBase
     private readonly IGroqTranscriptionClient _groqClient;
     private readonly IAudioCaptureService _audioCapture;
     private readonly IHotkeyService _hotkeyService;
+    private readonly IHotkeyService _autoCaptureHotkeyService;
     private readonly IStartupService _startupService;
     private readonly DictationOrchestrator _orchestrator;
     private string _apiKey = string.Empty;
     private string _connectionMessage = "Add a Groq API key to enable transcription.";
     private string _hotkeyText = HotkeySettings.Default.DisplayText;
+    private string _autoCaptureHotkeyText = HotkeySettings.DefaultAutoCapture.DisplayText;
     private string _scratchpadText = string.Empty;
     private string _scratchpadStatus = "Record a short clip to test Groq transcription without inserting text.";
     private bool _hasApiKey;
@@ -34,6 +36,7 @@ public sealed class MainViewModel : ViewModelBase
         IGroqTranscriptionClient groqClient,
         IAudioCaptureService audioCapture,
         IHotkeyService hotkeyService,
+        IHotkeyService autoCaptureHotkeyService,
         IStartupService startupService,
         DictationOrchestrator orchestrator)
     {
@@ -42,11 +45,13 @@ public sealed class MainViewModel : ViewModelBase
         _groqClient = groqClient;
         _audioCapture = audioCapture;
         _hotkeyService = hotkeyService;
+        _autoCaptureHotkeyService = autoCaptureHotkeyService;
         _startupService = startupService;
         _orchestrator = orchestrator;
         Settings = new AppSettings();
         Devices = [];
         SaveCommand = new AsyncRelayCommand(SaveHotkeyAsync);
+        SaveAutoCaptureHotkeyCommand = new AsyncRelayCommand(SaveAutoCaptureHotkeyAsync);
         TestConnectionCommand = new AsyncRelayCommand(TestConnectionAsync);
         ToggleListeningCommand = new AsyncRelayCommand(ToggleListeningAsync);
         RemoveKeyCommand = new AsyncRelayCommand(RemoveKeyAsync);
@@ -65,6 +70,7 @@ public sealed class MainViewModel : ViewModelBase
     public AppSettings Settings { get; private set; }
     public ObservableCollection<AudioDeviceInfo> Devices { get; }
     public ICommand SaveCommand { get; }
+    public ICommand SaveAutoCaptureHotkeyCommand { get; }
     public ICommand TestConnectionCommand { get; }
     public ICommand ToggleListeningCommand { get; }
     public ICommand ScratchpadCommand { get; }
@@ -101,6 +107,12 @@ public sealed class MainViewModel : ViewModelBase
     {
         get => _hotkeyText;
         set => SetProperty(ref _hotkeyText, value);
+    }
+
+    public string AutoCaptureHotkeyText
+    {
+        get => _autoCaptureHotkeyText;
+        set => SetProperty(ref _autoCaptureHotkeyText, value);
     }
 
     public string ScratchpadText
@@ -183,6 +195,7 @@ public sealed class MainViewModel : ViewModelBase
         Settings = await _settingsService.LoadAsync(CancellationToken.None);
         StartWithWindows = _startupService.IsEnabled();
         HotkeyText = Settings.Hotkey.DisplayText;
+        AutoCaptureHotkeyText = Settings.AutoCaptureHotkey.DisplayText;
         HasApiKey = !string.IsNullOrWhiteSpace(await _secretStore.GetApiKeyAsync(CancellationToken.None));
         if (HasApiKey)
         {
@@ -190,7 +203,7 @@ public sealed class MainViewModel : ViewModelBase
         }
 
         await LoadDevicesAsync();
-        RegisterHotkey();
+        RegisterHotkeys();
         OnPropertyChanged(nameof(Settings));
         OnPropertyChanged(nameof(IsAutoCaptureMode));
         OnPropertyChanged(nameof(IsAutoCaptureListening));
@@ -262,6 +275,17 @@ public sealed class MainViewModel : ViewModelBase
         SettingsChanged?.Invoke(this, EventArgs.Empty);
         SettingsSaved?.Invoke(this, EventArgs.Empty);
         AutoCaptureListeningChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    public async Task HandleAutoCaptureHotkeyPressedAsync()
+    {
+        if (Settings.ActivationMode is not ActivationMode.AutoCapture)
+        {
+            ConnectionMessage = "Switch Input mode to AutoCapture before using the AutoCapture hotkey.";
+            return;
+        }
+
+        await ToggleAutoCaptureListeningAsync();
     }
 
     public async Task SetStartWithWindowsAsync(bool enabled)
@@ -389,9 +413,54 @@ public sealed class MainViewModel : ViewModelBase
             return;
         }
 
+        if (HotkeysMatch(parsedHotkey, Settings.AutoCaptureHotkey))
+        {
+            ConnectionMessage = "Choose a different shortcut for dictation and AutoCapture listening.";
+            return;
+        }
+
+        var previousHotkey = Settings.Hotkey;
         Settings.Hotkey = parsedHotkey;
         HotkeyText = parsedHotkey.DisplayText;
-        await SaveSettingsCoreAsync(registerHotkey: true, updateMessage: true);
+        if (!RegisterDictationHotkey())
+        {
+            Settings.Hotkey = previousHotkey;
+            HotkeyText = previousHotkey.DisplayText;
+            RegisterDictationHotkey();
+            return;
+        }
+
+        await SaveSettingsCoreAsync(registerHotkey: false, updateMessage: false);
+        ConnectionMessage = "Hotkey saved.";
+    }
+
+    public async Task SaveAutoCaptureHotkeyAsync()
+    {
+        if (!HotkeyValidator.TryParse(AutoCaptureHotkeyText, out var parsedHotkey, out var hotkeyError))
+        {
+            ConnectionMessage = hotkeyError ?? "Could not read AutoCapture hotkey.";
+            return;
+        }
+
+        if (HotkeysMatch(parsedHotkey, Settings.Hotkey))
+        {
+            ConnectionMessage = "Choose a different shortcut for dictation and AutoCapture listening.";
+            return;
+        }
+
+        var previousHotkey = Settings.AutoCaptureHotkey;
+        Settings.AutoCaptureHotkey = parsedHotkey;
+        AutoCaptureHotkeyText = parsedHotkey.DisplayText;
+        if (!RegisterAutoCaptureHotkey())
+        {
+            Settings.AutoCaptureHotkey = previousHotkey;
+            AutoCaptureHotkeyText = previousHotkey.DisplayText;
+            RegisterAutoCaptureHotkey();
+            return;
+        }
+
+        await SaveSettingsCoreAsync(registerHotkey: false, updateMessage: false);
+        ConnectionMessage = "AutoCapture hotkey saved.";
     }
 
     public void ApplyLiveSettings()
@@ -414,7 +483,7 @@ public sealed class MainViewModel : ViewModelBase
         await _settingsService.SaveAsync(Settings, CancellationToken.None);
         if (registerHotkey)
         {
-            RegisterHotkey();
+            RegisterHotkeys();
         }
 
         if (updateMessage)
@@ -484,13 +553,40 @@ public sealed class MainViewModel : ViewModelBase
         AutoCaptureListeningChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    private void RegisterHotkey()
+    private void RegisterHotkeys()
+    {
+        RegisterDictationHotkey();
+        RegisterAutoCaptureHotkey();
+    }
+
+    private bool RegisterDictationHotkey()
     {
         if (!_hotkeyService.TryRegister(Settings.Hotkey, out var error))
         {
             ConnectionMessage = error ?? "Could not register hotkey.";
+            return false;
         }
+
+        return true;
     }
+
+    private bool RegisterAutoCaptureHotkey()
+    {
+        if (!_autoCaptureHotkeyService.TryRegister(Settings.AutoCaptureHotkey, out var error))
+        {
+            ConnectionMessage = error ?? "Could not register AutoCapture hotkey.";
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool HotkeysMatch(HotkeySettings left, HotkeySettings right) =>
+        left.Modifiers == right.Modifiers &&
+        string.Equals(
+            HotkeyValidator.NormalizeKey(left.Key),
+            HotkeyValidator.NormalizeKey(right.Key),
+            StringComparison.OrdinalIgnoreCase);
 
     private static void RunOnUi(Action action)
     {

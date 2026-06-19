@@ -21,6 +21,7 @@ public partial class App : System.Windows.Application
     private MainViewModel? _viewModel;
     private NaudioCaptureService? _audioCapture;
     private NativeHotkeyService? _hotkeyService;
+    private NativeHotkeyService? _autoCaptureHotkeyService;
     private ThemeService? _themeService;
     private NaudioLevelMonitorService? _levelMonitor;
     private AutoCaptureService? _autoCaptureService;
@@ -89,6 +90,7 @@ public partial class App : System.Windows.Application
             _httpClient = new HttpClient();
             _audioCapture = new NaudioCaptureService();
             _hotkeyService = new NativeHotkeyService();
+            _autoCaptureHotkeyService = new NativeHotkeyService();
             _levelMonitor = new NaudioLevelMonitorService();
             _themeService = new ThemeService(Resources);
 
@@ -111,7 +113,7 @@ public partial class App : System.Windows.Application
                 keyboardCommandService,
                 overlayService);
 
-            _viewModel = new MainViewModel(settingsService, secretStore, groqClient, _audioCapture, _hotkeyService, startupService, orchestrator);
+            _viewModel = new MainViewModel(settingsService, secretStore, groqClient, _audioCapture, _hotkeyService, _autoCaptureHotkeyService, startupService, orchestrator);
             _autoCaptureService = new AutoCaptureService(settingsService, secretStore, _levelMonitor, _audioCapture, orchestrator, overlayService);
             _trayService = new TrayService(_viewModel, startupService, ShowMainWindow, QuitAsync);
             overlayService.NotificationRequested += (_, message) => _trayService?.ShowNotification(message);
@@ -127,6 +129,7 @@ public partial class App : System.Windows.Application
             });
             _hotkeyService.Pressed += async (_, _) => await _viewModel.HandleHotkeyPressedAsync();
             _hotkeyService.Released += async (_, _) => await _viewModel.HandleHotkeyReleasedAsync();
+            _autoCaptureHotkeyService.Pressed += async (_, _) => await _viewModel.HandleAutoCaptureHotkeyPressedAsync();
             _viewModel.SettingsChanged += (_, _) => _ = ApplyLiveSettingsAsync(overlayService);
 
             await _viewModel.InitializeAsync();
@@ -217,6 +220,7 @@ public partial class App : System.Windows.Application
     {
         _trayService?.Dispose();
         _hotkeyService?.Dispose();
+        _autoCaptureHotkeyService?.Dispose();
         if (_audioCapture is not null)
         {
             await _audioCapture.DisposeAsync();

@@ -5,6 +5,7 @@ public sealed class AppSettings
     public bool FirstRunComplete { get; set; }
     public string? MicrophoneDeviceId { get; set; }
     public HotkeySettings Hotkey { get; set; } = HotkeySettings.Default;
+    public HotkeySettings AutoCaptureHotkey { get; set; } = HotkeySettings.DefaultAutoCapture;
     public ActivationMode ActivationMode { get; set; } = ActivationMode.Toggle;
     public string ModelId { get; set; } = "whisper-large-v3-turbo";
     public string? Language { get; set; }

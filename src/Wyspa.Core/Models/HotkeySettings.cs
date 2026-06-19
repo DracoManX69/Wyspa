@@ -17,6 +17,7 @@ public sealed record HotkeySettings(
     string Key)
 {
     public static HotkeySettings Default { get; } = new(HotkeyModifiers.Control | HotkeyModifiers.Alt, "Space");
+    public static HotkeySettings DefaultAutoCapture { get; } = new(HotkeyModifiers.Control | HotkeyModifiers.Alt, "A");
 
     [JsonIgnore]
     public string DisplayText

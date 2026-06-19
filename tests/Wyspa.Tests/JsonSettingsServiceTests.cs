@@ -15,7 +15,8 @@ public sealed class JsonSettingsServiceTests
             FirstRunComplete = true,
             Language = "en",
             StartMinimized = true,
-            Hotkey = new HotkeySettings(HotkeyModifiers.Control | HotkeyModifiers.Shift, "F8")
+            Hotkey = new HotkeySettings(HotkeyModifiers.Control | HotkeyModifiers.Shift, "F8"),
+            AutoCaptureHotkey = new HotkeySettings(HotkeyModifiers.Control | HotkeyModifiers.Alt, "A")
         };
 
         await service.SaveAsync(settings, CancellationToken.None);
@@ -26,6 +27,8 @@ public sealed class JsonSettingsServiceTests
         Assert.True(loaded.StartMinimized);
         Assert.Equal("F8", loaded.Hotkey.Key);
         Assert.Equal(HotkeyModifiers.Control | HotkeyModifiers.Shift, loaded.Hotkey.Modifiers);
+        Assert.Equal("A", loaded.AutoCaptureHotkey.Key);
+        Assert.Equal(HotkeyModifiers.Control | HotkeyModifiers.Alt, loaded.AutoCaptureHotkey.Modifiers);
     }
 
     [Fact]

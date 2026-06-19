@@ -263,6 +263,7 @@ public sealed class AutoCaptureService : IDisposable
         FirstRunComplete = settings.FirstRunComplete,
         MicrophoneDeviceId = settings.MicrophoneDeviceId,
         Hotkey = settings.Hotkey,
+        AutoCaptureHotkey = settings.AutoCaptureHotkey,
         ActivationMode = settings.ActivationMode,
         ModelId = settings.ModelId,
         Language = settings.Language,

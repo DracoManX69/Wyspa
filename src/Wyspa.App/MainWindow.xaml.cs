@@ -12,7 +12,7 @@ public partial class MainWindow : Window
 {
     private readonly DispatcherTimer _autoSaveTimer;
     private bool _isReadyForAutoSave;
-    private bool _isRecordingHotkey;
+    private HotkeyRecordingTarget _recordingHotkeyTarget = HotkeyRecordingTarget.None;
     private ScratchpadWindow? _scratchpadWindow;
     public bool IsDarkMode { get; set; }
 
@@ -60,22 +60,37 @@ public partial class MainWindow : Window
 
     private void HotkeyRecorderBox_OnGotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
     {
-        _isRecordingHotkey = true;
+        _recordingHotkeyTarget = HotkeyRecordingTarget.Dictation;
         HotkeyRecorderBox.Text = "Press shortcut...";
+    }
+
+    private void AutoCaptureHotkeyRecorderBox_OnGotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        _recordingHotkeyTarget = HotkeyRecordingTarget.AutoCapture;
+        AutoCaptureHotkeyRecorderBox.Text = "Press shortcut...";
     }
 
     private async void SaveHotkeyButton_OnClick(object sender, RoutedEventArgs e)
     {
-        _isRecordingHotkey = false;
+        _recordingHotkeyTarget = HotkeyRecordingTarget.None;
         if (DataContext is MainViewModel viewModel)
         {
             await viewModel.SaveHotkeyAsync();
         }
     }
 
+    private async void SaveAutoCaptureHotkeyButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        _recordingHotkeyTarget = HotkeyRecordingTarget.None;
+        if (DataContext is MainViewModel viewModel)
+        {
+            await viewModel.SaveAutoCaptureHotkeyAsync();
+        }
+    }
+
     private void Window_OnPreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
-        if (!_isRecordingHotkey)
+        if (_recordingHotkeyTarget is HotkeyRecordingTarget.None)
         {
             return;
         }
@@ -86,14 +101,31 @@ public partial class MainWindow : Window
 
         if (IsModifierKey(key))
         {
-            HotkeyRecorderBox.Text = FormatModifiers(Keyboard.Modifiers);
+            SetRecordedHotkeyText(FormatModifiers(Keyboard.Modifiers));
             return;
         }
 
         var shortcut = FormatShortcut(Keyboard.Modifiers, key);
+        SetRecordedHotkeyText(shortcut);
+    }
+
+    private void SetRecordedHotkeyText(string shortcut)
+    {
         if (DataContext is MainViewModel viewModel)
         {
-            viewModel.HotkeyText = shortcut;
+            if (_recordingHotkeyTarget is HotkeyRecordingTarget.AutoCapture)
+            {
+                viewModel.AutoCaptureHotkeyText = shortcut;
+            }
+            else
+            {
+                viewModel.HotkeyText = shortcut;
+            }
+        }
+
+        if (_recordingHotkeyTarget is HotkeyRecordingTarget.AutoCapture)
+        {
+            AutoCaptureHotkeyRecorderBox.Text = shortcut;
         }
         else
         {
@@ -166,6 +198,7 @@ public partial class MainWindow : Window
     private void AutoSaveTextBox_OnLostFocus(object sender, RoutedEventArgs e)
     {
         if (ReferenceEquals(e.OriginalSource, HotkeyRecorderBox) ||
+            ReferenceEquals(e.OriginalSource, AutoCaptureHotkeyRecorderBox) ||
             ReferenceEquals(e.OriginalSource, ApiKeyBox))
         {
             return;
@@ -176,14 +209,14 @@ public partial class MainWindow : Window
 
     private void QueueSettingsChange(bool saveImmediately)
     {
-        if (!_isReadyForAutoSave || _isRecordingHotkey)
+        if (!_isReadyForAutoSave || _recordingHotkeyTarget is not HotkeyRecordingTarget.None)
         {
             return;
         }
 
         Dispatcher.BeginInvoke(new Action(async () =>
         {
-            if (DataContext is not MainViewModel viewModel || _isRecordingHotkey)
+            if (DataContext is not MainViewModel viewModel || _recordingHotkeyTarget is not HotkeyRecordingTarget.None)
             {
                 return;
             }
@@ -209,9 +242,21 @@ public partial class MainWindow : Window
     private async void AutoSaveTimer_OnTick(object? sender, EventArgs e)
     {
         _autoSaveTimer.Stop();
+        if (_recordingHotkeyTarget is not HotkeyRecordingTarget.None)
+        {
+            return;
+        }
+
         if (DataContext is MainViewModel viewModel)
         {
             await viewModel.AutoSaveSettingsAsync();
         }
+    }
+
+    private enum HotkeyRecordingTarget
+    {
+        None,
+        Dictation,
+        AutoCapture
     }
 }

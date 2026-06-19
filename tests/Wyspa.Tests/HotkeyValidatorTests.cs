@@ -15,6 +15,15 @@ public sealed class HotkeyValidatorTests
     }
 
     [Fact]
+    public void TryValidate_AllowsDefaultAutoCaptureHotkey()
+    {
+        var valid = HotkeyValidator.TryValidate(HotkeySettings.DefaultAutoCapture, out var message);
+
+        Assert.True(valid);
+        Assert.Null(message);
+    }
+
+    [Fact]
     public void TryValidate_RejectsMissingModifier()
     {
         var valid = HotkeyValidator.TryValidate(new HotkeySettings(HotkeyModifiers.None, "Space"), out var message);

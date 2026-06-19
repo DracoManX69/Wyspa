@@ -183,7 +183,23 @@
                                             Margin="7,2,0,5"
                                             Content="Save hotkey" />
                                 </Grid>
-                                <TextBlock Text="Click the shortcut field, press your shortcut, then save hotkey. F13-F24 macro keys can be used without modifiers." Style="{StaticResource BodyText}" />
+                                <TextBlock Text="AutoCapture listening shortcut" Style="{StaticResource FieldLabel}" />
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox x:Name="AutoCaptureHotkeyRecorderBox"
+                                             Text="{Binding AutoCaptureHotkeyText, Mode=OneWay}"
+                                             IsReadOnly="True"
+                                             GotKeyboardFocus="AutoCaptureHotkeyRecorderBox_OnGotKeyboardFocus" />
+                                    <Button Grid.Column="1"
+                                            Style="{StaticResource PrimaryButton}"
+                                            Click="SaveAutoCaptureHotkeyButton_OnClick"
+                                            Margin="7,2,0,5"
+                                            Content="Save hotkey" />
+                                </Grid>
+                                <TextBlock Text="Click a shortcut field, press your shortcut, then save hotkey. F13-F24 macro keys can be used without modifiers." Style="{StaticResource BodyText}" />
                             </StackPanel>
                         </ScrollViewer>
                     </TabItem>
