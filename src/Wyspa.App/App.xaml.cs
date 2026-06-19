@@ -103,6 +103,7 @@ public partial class App : System.Windows.Application
             var startupService = new WindowsStartupService(Environment.ProcessPath ?? Process.GetCurrentProcess().MainModule?.FileName ?? "Wyspa.exe");
             var overlayService = new OverlayStatusService(() => _overlay ??= new StatusOverlayWindow());
             var wakeToneService = new WakeToneService();
+            var autoCaptureToggleFeedbackService = new AutoCaptureToggleFeedbackService(overlayService);
 
             var orchestrator = new DictationOrchestrator(
                 settingsService,
@@ -132,6 +133,8 @@ public partial class App : System.Windows.Application
             _hotkeyService.Released += async (_, _) => await _viewModel.HandleHotkeyReleasedAsync();
             _autoCaptureHotkeyService.Pressed += async (_, _) => await _viewModel.HandleAutoCaptureHotkeyPressedAsync();
             _viewModel.SettingsChanged += (_, _) => _ = ApplyLiveSettingsAsync(overlayService);
+            _viewModel.AutoCaptureToggleFeedbackRequested += (_, isListening) =>
+                autoCaptureToggleFeedbackService.Show(isListening, _viewModel.Settings.OverlayOpacity);
 
             await _viewModel.InitializeAsync();
             await _autoCaptureService.RefreshAsync();

@@ -31,6 +31,16 @@ public sealed class OverlayStatusService
         });
     }
 
+    public void ShowAutoCaptureToggle(bool isListening)
+    {
+        RunOnUi(() =>
+        {
+            var window = _windowFactory();
+            window.SetAutoCaptureToggleStatus(isListening);
+            window.ShowTransient();
+        });
+    }
+
     public void UpdateLevel(float level)
     {
         RunOnUi(() =>

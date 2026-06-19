@@ -50,6 +50,14 @@
                 <Border x:Name="Bar10" Grid.Column="9" Width="5" Height="4" CornerRadius="2.5" Background="#2B7A78" VerticalAlignment="Center" />
                 <Border x:Name="Bar11" Grid.Column="10" Width="5" Height="4" CornerRadius="2.5" Background="#2B7A78" VerticalAlignment="Center" />
                 <Border x:Name="Bar12" Grid.Column="11" Width="5" Height="4" CornerRadius="2.5" Background="#2B7A78" VerticalAlignment="Center" />
+                <TextBlock x:Name="ToggleStatusText"
+                           Grid.ColumnSpan="12"
+                           Visibility="Collapsed"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           FontSize="17"
+                           FontWeight="SemiBold"
+                           Foreground="#172025" />
             </Grid>
             <TextBlock x:Name="StatusText"
                        Grid.Row="1"

@@ -89,6 +89,7 @@ public sealed class MainViewModel : ViewModelBase
     public event EventHandler? SettingsSaved;
     public event EventHandler? SettingsChanged;
     public event EventHandler? AutoCaptureListeningChanged;
+    public event EventHandler<bool>? AutoCaptureToggleFeedbackRequested;
     public event EventHandler? StartupSettingChanged;
 
     public AppSettings Settings { get; private set; }
@@ -320,6 +321,7 @@ public sealed class MainViewModel : ViewModelBase
         ConnectionMessage = Settings.AutoCaptureListeningEnabled
             ? "AutoCapture listening is on."
             : "AutoCapture listening is off.";
+        AutoCaptureToggleFeedbackRequested?.Invoke(this, Settings.AutoCaptureListeningEnabled);
         OnPropertyChanged(nameof(Settings));
         OnPropertyChanged(nameof(IsAutoCaptureMode));
         OnPropertyChanged(nameof(IsAutoCaptureListening));

@@ -18,5 +18,7 @@
     <Resource Include="Assets\AppIcon.ico" />
     <Resource Include="Assets\AppLogo.png" />
     <Resource Include="Assets\WakeTone.wav" />
+    <Resource Include="Assets\AutoCaptureOn.wav" />
+    <Resource Include="Assets\AutoCaptureOff.wav" />
   </ItemGroup>
 </Project>

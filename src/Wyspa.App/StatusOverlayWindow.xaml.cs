@@ -40,6 +40,7 @@ public partial class StatusOverlayWindow : Window
     public void SetStatus(string message, DictationState state)
     {
         _currentState = state;
+        ToggleStatusText.Visibility = Visibility.Collapsed;
         StatusText.Text = message;
         var color = state switch
         {
@@ -57,6 +58,22 @@ public partial class StatusOverlayWindow : Window
         if (state is not (DictationState.Listening or DictationState.Transcribing))
         {
             SetBarHeights(Enumerable.Repeat(5d, _bars.Length).ToArray());
+        }
+    }
+
+    public void SetAutoCaptureToggleStatus(bool isListening)
+    {
+        _currentState = DictationState.Inserted;
+        ToggleStatusText.Text = isListening ? "Listening on" : "Listening off";
+        ToggleStatusText.Visibility = Visibility.Visible;
+        StatusText.Text = "AutoCapture";
+        var color = isListening
+            ? MediaColor.FromRgb(56, 137, 89)
+            : MediaColor.FromRgb(100, 112, 132);
+        ToggleStatusText.Foreground = new SolidColorBrush(color);
+        foreach (var bar in _bars)
+        {
+            bar.Height = 0;
         }
     }
 
