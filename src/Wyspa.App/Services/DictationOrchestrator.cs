@@ -187,6 +187,7 @@ public sealed class DictationOrchestrator
             var inserted = await _textInsertion.InsertAsync(
                 cleaned,
                 settings.InsertionMode,
+                copyToClipboardOnSuccess: settings.CopyInsertedTextToClipboard,
                 copyToClipboardOnFailure: settings.IntentActionsEnabled,
                 cancellationToken);
             if (inserted)

@@ -6,7 +6,7 @@ namespace Wyspa.Infrastructure.Insertion;
 
 public sealed class WindowsTextInsertionService : ITextInsertionService
 {
-    public async Task<bool> InsertAsync(string text, InsertionMode mode, bool copyToClipboardOnFailure, CancellationToken cancellationToken)
+    public async Task<bool> InsertAsync(string text, InsertionMode mode, bool copyToClipboardOnSuccess, bool copyToClipboardOnFailure, CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(text))
         {
@@ -18,10 +18,15 @@ public sealed class WindowsTextInsertionService : ITextInsertionService
             if (mode is InsertionMode.Type)
             {
                 SendKeys.SendWait(EscapeForSendKeys(text));
+                if (copyToClipboardOnSuccess)
+                {
+                    CopyToClipboard(text);
+                }
+
                 return true;
             }
 
-            await PasteWithClipboardAsync(text, cancellationToken);
+            await PasteWithClipboardAsync(text, copyToClipboardOnSuccess, cancellationToken);
             return true;
         }
         catch
@@ -40,7 +45,7 @@ public sealed class WindowsTextInsertionService : ITextInsertionService
         Clipboard.SetText(text);
     }
 
-    private static async Task PasteWithClipboardAsync(string text, CancellationToken cancellationToken)
+    private static async Task PasteWithClipboardAsync(string text, bool keepTextOnClipboard, CancellationToken cancellationToken)
     {
         IDataObject? previous = null;
         var pasteSent = false;
@@ -71,7 +76,11 @@ public sealed class WindowsTextInsertionService : ITextInsertionService
         }
         finally
         {
-            if (previous is not null)
+            if (keepTextOnClipboard)
+            {
+                CopyToClipboard(text);
+            }
+            else if (previous is not null)
             {
                 TryRestoreClipboard(previous);
             }

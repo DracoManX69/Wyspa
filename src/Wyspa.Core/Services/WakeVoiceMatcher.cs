@@ -5,10 +5,10 @@ namespace Wyspa.Core.Services;
 public sealed class WakeVoiceMatcher
 {
     public const int SampleRate = 16000;
-    private const int SegmentCount = 12;
+    private const int SegmentCount = 14;
     private const int MinSampleCount = SampleRate / 2;
     private const int MaxSampleCount = SampleRate * 3;
-    private static readonly double[] BandCenters = [180, 300, 500, 800, 1300, 2200];
+    private static readonly double[] BandCenters = [160, 250, 400, 630, 1000, 1600, 2500, 3600];
 
     public WakeVoiceProfile CreateProfile(IReadOnlyList<float> samples)
     {
@@ -45,9 +45,54 @@ public sealed class WakeVoiceMatcher
         }
 
         var targetSampleCount = Math.Clamp(profile.DurationMs * SampleRate / 1000, MinSampleCount, MaxSampleCount);
-        var source = samples.Count > targetSampleCount ? samples.Skip(samples.Count - targetSampleCount).ToArray() : samples.ToArray();
-        var features = BuildFeatures(source);
-        return DistanceSimilarity(features, profile.Features);
+        return BestRecentWindowScore(samples, profile.Features, targetSampleCount);
+    }
+
+    private static double BestRecentWindowScore(IReadOnlyList<float> samples, IReadOnlyList<double> profileFeatures, int targetSampleCount)
+    {
+        var best = ScoreCandidate(TrimSilence(samples), profileFeatures);
+        var windowSizes = new[]
+        {
+            Math.Clamp((int)(targetSampleCount * 0.72), MinSampleCount, MaxSampleCount),
+            targetSampleCount,
+            Math.Clamp((int)(targetSampleCount * 1.32), MinSampleCount, MaxSampleCount)
+        };
+
+        foreach (var windowSize in windowSizes.Distinct())
+        {
+            if (samples.Count < windowSize)
+            {
+                continue;
+            }
+
+            var step = Math.Max(SampleRate / 12, windowSize / 8);
+            for (var end = samples.Count; end >= windowSize; end -= step)
+            {
+                var candidate = new float[windowSize];
+                for (var index = 0; index < windowSize; index++)
+                {
+                    candidate[index] = samples[end - windowSize + index];
+                }
+
+                best = Math.Max(best, ScoreCandidate(TrimSilence(candidate), profileFeatures));
+                if (best >= 0.995)
+                {
+                    return best;
+                }
+            }
+        }
+
+        return best;
+    }
+
+    private static double ScoreCandidate(IReadOnlyList<float> samples, IReadOnlyList<double> profileFeatures)
+    {
+        if (samples.Count < MinSampleCount)
+        {
+            return 0;
+        }
+
+        return DistanceSimilarity(BuildFeatures(samples), profileFeatures);
     }
 
     private static float[] TrimSilence(IReadOnlyList<float> samples)
@@ -171,6 +216,6 @@ public sealed class WakeVoiceMatcher
         }
 
         var rmse = Math.Sqrt(distance / Math.Max(1, length));
-        return Math.Clamp(Math.Exp(-3.5d * rmse), 0, 1);
+        return Math.Clamp(Math.Exp(-2.6d * rmse), 0, 1);
     }
 }

@@ -498,7 +498,7 @@ public sealed class MainViewModel : ViewModelBase
             Settings.AutoCaptureWakeVoiceProfile = _wakeVoiceMatcher.CreateProfile(samples);
             Settings.AutoCaptureWakeVoiceEnabled = true;
             await SaveSettingsCoreAsync(registerHotkey: false, updateMessage: false);
-            WakeVoiceStatus = $"Wake phrase saved locally ({Settings.AutoCaptureWakeVoiceProfile.DurationMs} ms).";
+            WakeVoiceStatus = $"Wake phrase saved locally ({Settings.AutoCaptureWakeVoiceProfile.DurationMs} ms). Start around 60% strictness and adjust from there.";
             ConnectionMessage = "Wake phrase saved. AutoCapture now waits for the local match.";
             OnPropertyChanged(nameof(Settings));
         }
@@ -635,7 +635,7 @@ public sealed class MainViewModel : ViewModelBase
         Settings.AutoCaptureThreshold = Math.Clamp(Settings.AutoCaptureThreshold, 0.0f, 1.0f);
         Settings.AutoCaptureSilenceMs = Math.Clamp(Settings.AutoCaptureSilenceMs, 400, 5000);
         Settings.AutoCaptureMinSpeechMs = Math.Clamp(Settings.AutoCaptureMinSpeechMs, 250, 3000);
-        Settings.AutoCaptureWakeVoiceSensitivity = Math.Clamp(Settings.AutoCaptureWakeVoiceSensitivity, 0.45, 0.95);
+        Settings.AutoCaptureWakeVoiceSensitivity = Math.Clamp(Settings.AutoCaptureWakeVoiceSensitivity, 0.0, 1.0);
         Settings.IntentConfidenceThreshold = Math.Clamp(Settings.IntentConfidenceThreshold, 0.1, 0.95);
     }
 

@@ -27,6 +27,20 @@ public sealed class WakeVoiceMatcherTests
         Assert.True(score < 0.8);
     }
 
+    [Fact]
+    public void Score_ReturnsHighMatch_WhenPhraseIsInsideRecentAudio()
+    {
+        var matcher = new WakeVoiceMatcher();
+        var phrase = BuildPhrase([220, 440, 330]);
+        var profile = matcher.CreateProfile(phrase);
+        var samples = new float[WakeVoiceMatcher.SampleRate + phrase.Length + WakeVoiceMatcher.SampleRate / 2];
+        Array.Copy(phrase, 0, samples, WakeVoiceMatcher.SampleRate, phrase.Length);
+
+        var score = matcher.Score(samples, profile);
+
+        Assert.True(score > 0.8);
+    }
+
     private static float[] BuildPhrase(double[] frequencies)
     {
         var segmentLength = WakeVoiceMatcher.SampleRate / 2;

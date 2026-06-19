@@ -27,6 +27,7 @@ public sealed class AutoCaptureService : IDisposable
     private bool _isStarting;
     private bool _isStopping;
     private DateTimeOffset _lastWakeVoiceCheckAt;
+    private DateTimeOffset _wakeVoiceAcceptedUntil;
 
     public AutoCaptureService(
         ISettingsService settingsService,
@@ -108,7 +109,7 @@ public sealed class AutoCaptureService : IDisposable
             return;
         }
 
-        if (settings.AutoCaptureWakeVoiceEnabled && settings.AutoCaptureWakeVoiceProfile is not null)
+        if (settings.AutoCaptureWakeVoiceEnabled)
         {
             return;
         }
@@ -149,6 +150,7 @@ public sealed class AutoCaptureService : IDisposable
         var score = ScoreWakeVoice(settings.AutoCaptureWakeVoiceProfile);
         if (score >= settings.AutoCaptureWakeVoiceSensitivity)
         {
+            _wakeVoiceAcceptedUntil = DateTimeOffset.UtcNow.AddMilliseconds(900);
             ClearWakeVoiceBuffer();
             RunOnAppDispatcher(StartCaptureAsync);
         }
@@ -189,7 +191,7 @@ public sealed class AutoCaptureService : IDisposable
                 settings.ActivationMode is not ActivationMode.AutoCapture ||
                 !settings.AutoCaptureListeningEnabled ||
                 !_hasApiKey ||
-                !WakeVoiceGateSatisfied(settings) ||
+                !WakeVoiceGateSatisfied(settings, DateTimeOffset.UtcNow) ||
                 DateTimeOffset.UtcNow < _cooldownUntil)
             {
                 return;
@@ -203,6 +205,7 @@ public sealed class AutoCaptureService : IDisposable
             }
 
             _isStarting = true;
+            _wakeVoiceAcceptedUntil = DateTimeOffset.MinValue;
             _monitor.Stop();
             _recordingStartedAt = DateTimeOffset.UtcNow;
             _lastVoiceAt = _recordingStartedAt;
@@ -268,8 +271,8 @@ public sealed class AutoCaptureService : IDisposable
         RunOnAppDispatcher(RestartMonitorIfNeededAsync);
     }
 
-    private bool WakeVoiceGateSatisfied(AppSettings settings) =>
-        !settings.AutoCaptureWakeVoiceEnabled || settings.AutoCaptureWakeVoiceProfile is not null;
+    private bool WakeVoiceGateSatisfied(AppSettings settings, DateTimeOffset now) =>
+        !settings.AutoCaptureWakeVoiceEnabled || now <= _wakeVoiceAcceptedUntil;
 
     private void RunOnAppDispatcher(Func<Task> action)
     {
@@ -313,6 +316,7 @@ public sealed class AutoCaptureService : IDisposable
         if (!settings.AutoCaptureWakeVoiceEnabled || settings.AutoCaptureWakeVoiceProfile is null)
         {
             ClearWakeVoiceBuffer();
+            _wakeVoiceAcceptedUntil = DateTimeOffset.MinValue;
         }
     }
 
@@ -369,6 +373,7 @@ public sealed class AutoCaptureService : IDisposable
         StartMinimized = settings.StartMinimized,
         StartWithWindows = settings.StartWithWindows,
         InsertionMode = settings.InsertionMode,
+        CopyInsertedTextToClipboard = settings.CopyInsertedTextToClipboard,
         CleanupEnabled = settings.CleanupEnabled,
         SpokenPunctuationEnabled = settings.SpokenPunctuationEnabled,
         IntentActionsEnabled = settings.IntentActionsEnabled,

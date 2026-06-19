@@ -180,8 +180,8 @@
                                                Text="{Binding Value, ElementName=WakeVoiceSensitivitySlider, StringFormat={}{0:P0}}" />
                                 </Grid>
                                 <Slider x:Name="WakeVoiceSensitivitySlider"
-                                        Minimum="0.45"
-                                        Maximum="0.95"
+                                        Minimum="0"
+                                        Maximum="1"
                                         TickFrequency="0.01"
                                         Value="{Binding Settings.AutoCaptureWakeVoiceSensitivity, UpdateSourceTrigger=PropertyChanged}" />
                                 <WrapPanel Margin="0,2,0,3">
@@ -244,6 +244,7 @@
                                     <ComboBoxItem Content="Paste with clipboard restore" Tag="{x:Static models:InsertionMode.Paste}" />
                                     <ComboBoxItem Content="Type characters" Tag="{x:Static models:InsertionMode.Type}" />
                                 </ComboBox>
+                                <CheckBox Content="Keep inserted text on clipboard for manual paste" IsChecked="{Binding Settings.CopyInsertedTextToClipboard}" />
                                 <CheckBox Content="Enable spoken commands and Groq intent actions" IsChecked="{Binding Settings.IntentActionsEnabled}" />
                                 <TextBlock Text="Intent model" Style="{StaticResource FieldLabel}" />
                                 <TextBox Text="{Binding Settings.IntentModelId, UpdateSourceTrigger=PropertyChanged}" />

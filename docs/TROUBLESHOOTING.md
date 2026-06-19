@@ -14,7 +14,7 @@ If setup says .NET is missing:
 
 1. Let the installer open the Microsoft runtime page or installer.
 2. Install the .NET 10 Desktop Runtime x64.
-3. Run `WyspaSetup-0.4.5-win-x64.exe` again.
+3. Run `WyspaSetup-0.4.6-win-x64.exe` again.
 
 The Wyspa installer does not currently install .NET silently inside the wizard.
 

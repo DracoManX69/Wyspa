@@ -15,6 +15,7 @@ public sealed class JsonSettingsServiceTests
             FirstRunComplete = true,
             Language = "en",
             StartMinimized = true,
+            CopyInsertedTextToClipboard = true,
             Hotkey = new HotkeySettings(HotkeyModifiers.Control | HotkeyModifiers.Shift, "F8"),
             AutoCaptureHotkey = new HotkeySettings(HotkeyModifiers.Control | HotkeyModifiers.Alt, "A"),
             AutoCaptureWakeVoiceEnabled = true,
@@ -33,6 +34,7 @@ public sealed class JsonSettingsServiceTests
         Assert.True(loaded.FirstRunComplete);
         Assert.Equal("en", loaded.Language);
         Assert.True(loaded.StartMinimized);
+        Assert.True(loaded.CopyInsertedTextToClipboard);
         Assert.Equal("F8", loaded.Hotkey.Key);
         Assert.Equal(HotkeyModifiers.Control | HotkeyModifiers.Shift, loaded.Hotkey.Modifiers);
         Assert.Equal("A", loaded.AutoCaptureHotkey.Key);

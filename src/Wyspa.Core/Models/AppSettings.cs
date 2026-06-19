@@ -13,6 +13,7 @@ public sealed class AppSettings
     public bool StartMinimized { get; set; }
     public bool StartWithWindows { get; set; }
     public InsertionMode InsertionMode { get; set; } = InsertionMode.Paste;
+    public bool CopyInsertedTextToClipboard { get; set; }
     public bool CleanupEnabled { get; set; } = true;
     public bool SpokenPunctuationEnabled { get; set; } = true;
     public bool IntentActionsEnabled { get; set; } = true;
@@ -26,6 +27,6 @@ public sealed class AppSettings
     public int AutoCaptureMinSpeechMs { get; set; } = 650;
     public bool AutoCaptureListeningEnabled { get; set; } = true;
     public bool AutoCaptureWakeVoiceEnabled { get; set; }
-    public double AutoCaptureWakeVoiceSensitivity { get; set; } = 0.74;
+    public double AutoCaptureWakeVoiceSensitivity { get; set; } = 0.62;
     public WakeVoiceProfile? AutoCaptureWakeVoiceProfile { get; set; }
 }
