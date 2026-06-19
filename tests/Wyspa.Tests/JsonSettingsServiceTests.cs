@@ -16,7 +16,15 @@ public sealed class JsonSettingsServiceTests
             Language = "en",
             StartMinimized = true,
             Hotkey = new HotkeySettings(HotkeyModifiers.Control | HotkeyModifiers.Shift, "F8"),
-            AutoCaptureHotkey = new HotkeySettings(HotkeyModifiers.Control | HotkeyModifiers.Alt, "A")
+            AutoCaptureHotkey = new HotkeySettings(HotkeyModifiers.Control | HotkeyModifiers.Alt, "A"),
+            AutoCaptureWakeVoiceEnabled = true,
+            AutoCaptureWakeVoiceSensitivity = 0.81,
+            AutoCaptureWakeVoiceProfile = new WakeVoiceProfile
+            {
+                DurationMs = 1200,
+                SegmentCount = 12,
+                Features = [0.1, 0.2, 0.3]
+            }
         };
 
         await service.SaveAsync(settings, CancellationToken.None);
@@ -29,6 +37,10 @@ public sealed class JsonSettingsServiceTests
         Assert.Equal(HotkeyModifiers.Control | HotkeyModifiers.Shift, loaded.Hotkey.Modifiers);
         Assert.Equal("A", loaded.AutoCaptureHotkey.Key);
         Assert.Equal(HotkeyModifiers.Control | HotkeyModifiers.Alt, loaded.AutoCaptureHotkey.Modifiers);
+        Assert.True(loaded.AutoCaptureWakeVoiceEnabled);
+        Assert.Equal(0.81, loaded.AutoCaptureWakeVoiceSensitivity);
+        Assert.NotNull(loaded.AutoCaptureWakeVoiceProfile);
+        Assert.Equal(1200, loaded.AutoCaptureWakeVoiceProfile.DurationMs);
     }
 
     [Fact]

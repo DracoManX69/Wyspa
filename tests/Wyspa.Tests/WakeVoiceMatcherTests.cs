@@ -1,0 +1,46 @@
+using Wyspa.Core.Services;
+
+namespace Wyspa.Tests;
+
+public sealed class WakeVoiceMatcherTests
+{
+    [Fact]
+    public void Score_ReturnsHighMatch_ForSamePhraseShape()
+    {
+        var matcher = new WakeVoiceMatcher();
+        var samples = BuildPhrase([220, 440, 330]);
+        var profile = matcher.CreateProfile(samples);
+
+        var score = matcher.Score(samples, profile);
+
+        Assert.True(score > 0.9);
+    }
+
+    [Fact]
+    public void Score_ReturnsLowerMatch_ForDifferentPhraseShape()
+    {
+        var matcher = new WakeVoiceMatcher();
+        var profile = matcher.CreateProfile(BuildPhrase([220, 440, 330]));
+
+        var score = matcher.Score(BuildPhrase([900, 1200, 700]), profile);
+
+        Assert.True(score < 0.8);
+    }
+
+    private static float[] BuildPhrase(double[] frequencies)
+    {
+        var segmentLength = WakeVoiceMatcher.SampleRate / 2;
+        var samples = new float[segmentLength * frequencies.Length];
+        for (var segment = 0; segment < frequencies.Length; segment++)
+        {
+            for (var index = 0; index < segmentLength; index++)
+            {
+                var sampleIndex = segment * segmentLength + index;
+                var envelope = Math.Sin(Math.PI * index / segmentLength);
+                samples[sampleIndex] = (float)(0.35 * envelope * Math.Sin(2 * Math.PI * frequencies[segment] * index / WakeVoiceMatcher.SampleRate));
+            }
+        }
+
+        return samples;
+    }
+}

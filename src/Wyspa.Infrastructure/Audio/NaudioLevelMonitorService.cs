@@ -8,6 +8,7 @@ public sealed class NaudioLevelMonitorService : IAudioLevelMonitorService
     private WaveInEvent? _waveIn;
 
     public event EventHandler<float>? LevelAvailable;
+    public event EventHandler<IReadOnlyList<float>>? AudioAvailable;
     public bool IsRunning => _waveIn is not null;
 
     public Task StartAsync(string? deviceId, CancellationToken cancellationToken)
@@ -61,13 +62,17 @@ public sealed class NaudioLevelMonitorService : IAudioLevelMonitorService
     private void OnDataAvailable(object? sender, WaveInEventArgs args)
     {
         var peak = 0f;
+        var samples = new float[args.BytesRecorded / 2];
         for (var index = 0; index + 1 < args.BytesRecorded; index += 2)
         {
             var sample = BitConverter.ToInt16(args.Buffer, index);
-            peak = Math.Max(peak, Math.Abs(sample / 32768f));
+            var level = sample / 32768f;
+            samples[index / 2] = level;
+            peak = Math.Max(peak, Math.Abs(level));
         }
 
         LevelAvailable?.Invoke(this, peak);
+        AudioAvailable?.Invoke(this, samples);
     }
 
     private static int ParseDeviceNumber(string? deviceId)

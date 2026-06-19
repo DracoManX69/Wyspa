@@ -167,6 +167,29 @@
                                 <TextBlock Text="Silence before stop (ms)" Style="{StaticResource FieldLabel}" />
                                 <TextBox Text="{Binding Settings.AutoCaptureSilenceMs, UpdateSourceTrigger=PropertyChanged}" />
                                 <CheckBox Content="AutoCapture listening enabled" IsChecked="{Binding Settings.AutoCaptureListeningEnabled}" />
+                                <TextBlock Text="Wake voice" Style="{StaticResource SectionTitle}" Margin="0,8,0,4" />
+                                <CheckBox Content="Require local hey whisper match" IsChecked="{Binding Settings.AutoCaptureWakeVoiceEnabled}" />
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Wake match strictness" Style="{StaticResource FieldLabel}" />
+                                    <TextBlock Grid.Column="1"
+                                               Style="{StaticResource BodyText}"
+                                               Text="{Binding Value, ElementName=WakeVoiceSensitivitySlider, StringFormat={}{0:P0}}" />
+                                </Grid>
+                                <Slider x:Name="WakeVoiceSensitivitySlider"
+                                        Minimum="0.45"
+                                        Maximum="0.95"
+                                        TickFrequency="0.01"
+                                        Value="{Binding Settings.AutoCaptureWakeVoiceSensitivity, UpdateSourceTrigger=PropertyChanged}" />
+                                <WrapPanel Margin="0,2,0,3">
+                                    <Button Style="{StaticResource PrimaryButton}"
+                                            Command="{Binding RecordWakeVoiceCommand}"
+                                            Content="{Binding WakeVoiceButtonText}" />
+                                </WrapPanel>
+                                <TextBlock Text="{Binding WakeVoiceStatus}" Style="{StaticResource BodyText}" Margin="0,0,0,5" />
                                 <TextBlock Text="Current shortcut" Style="{StaticResource FieldLabel}" />
                                 <Grid>
                                     <Grid.ColumnDefinitions>

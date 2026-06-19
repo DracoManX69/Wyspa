@@ -1,5 +1,6 @@
 using Wyspa.Core.Abstractions;
 using Wyspa.Core.Models;
+using Wyspa.Core.Services;
 using System.Windows.Threading;
 
 namespace Wyspa.App.Services;
@@ -12,8 +13,10 @@ public sealed class AutoCaptureService : IDisposable
     private readonly IAudioCaptureService _audioCapture;
     private readonly DictationOrchestrator _orchestrator;
     private readonly OverlayStatusService _overlay;
+    private readonly WakeVoiceMatcher _wakeVoiceMatcher = new();
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly object _settingsLock = new();
+    private readonly List<float> _wakeVoiceBuffer = [];
     private readonly Dispatcher _dispatcher;
     private AppSettings _settings = new();
     private DateTimeOffset _lastVoiceAt;
@@ -23,6 +26,7 @@ public sealed class AutoCaptureService : IDisposable
     private bool _hasApiKey;
     private bool _isStarting;
     private bool _isStopping;
+    private DateTimeOffset _lastWakeVoiceCheckAt;
 
     public AutoCaptureService(
         ISettingsService settingsService,
@@ -40,6 +44,7 @@ public sealed class AutoCaptureService : IDisposable
         _overlay = overlay;
         _dispatcher = System.Windows.Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
         _monitor.LevelAvailable += OnMonitorLevel;
+        _monitor.AudioAvailable += OnMonitorAudio;
         _audioCapture.LevelAvailable += OnRecordingLevel;
         _orchestrator.ListeningStarting += OnListeningStarting;
         _orchestrator.StateChanged += OnOrchestratorStateChanged;
@@ -78,6 +83,7 @@ public sealed class AutoCaptureService : IDisposable
     public void Dispose()
     {
         _monitor.LevelAvailable -= OnMonitorLevel;
+        _monitor.AudioAvailable -= OnMonitorAudio;
         _audioCapture.LevelAvailable -= OnRecordingLevel;
         _orchestrator.ListeningStarting -= OnListeningStarting;
         _orchestrator.StateChanged -= OnOrchestratorStateChanged;
@@ -102,7 +108,50 @@ public sealed class AutoCaptureService : IDisposable
             return;
         }
 
+        if (settings.AutoCaptureWakeVoiceEnabled && settings.AutoCaptureWakeVoiceProfile is not null)
+        {
+            return;
+        }
+
         RunOnAppDispatcher(StartCaptureAsync);
+    }
+
+    private void OnMonitorAudio(object? sender, IReadOnlyList<float> samples)
+    {
+        var settings = GetSettingsSnapshot();
+        if (settings.ActivationMode is not ActivationMode.AutoCapture ||
+            !settings.AutoCaptureListeningEnabled ||
+            !settings.AutoCaptureWakeVoiceEnabled ||
+            settings.AutoCaptureWakeVoiceProfile is null ||
+            !_hasApiKey ||
+            _audioCapture.IsRecording ||
+            _isStarting ||
+            _isStopping ||
+            DateTimeOffset.UtcNow < _cooldownUntil)
+        {
+            ClearWakeVoiceBuffer();
+            return;
+        }
+
+        AppendWakeVoiceSamples(samples);
+        var now = DateTimeOffset.UtcNow;
+        if (now - _lastWakeVoiceCheckAt < TimeSpan.FromMilliseconds(180))
+        {
+            return;
+        }
+
+        _lastWakeVoiceCheckAt = now;
+        if (Peak(samples) < Math.Max(0.015f, settings.AutoCaptureThreshold * 0.45f))
+        {
+            return;
+        }
+
+        var score = ScoreWakeVoice(settings.AutoCaptureWakeVoiceProfile);
+        if (score >= settings.AutoCaptureWakeVoiceSensitivity)
+        {
+            ClearWakeVoiceBuffer();
+            RunOnAppDispatcher(StartCaptureAsync);
+        }
     }
 
     private void OnRecordingLevel(object? sender, float level)
@@ -140,6 +189,7 @@ public sealed class AutoCaptureService : IDisposable
                 settings.ActivationMode is not ActivationMode.AutoCapture ||
                 !settings.AutoCaptureListeningEnabled ||
                 !_hasApiKey ||
+                !WakeVoiceGateSatisfied(settings) ||
                 DateTimeOffset.UtcNow < _cooldownUntil)
             {
                 return;
@@ -218,6 +268,9 @@ public sealed class AutoCaptureService : IDisposable
         RunOnAppDispatcher(RestartMonitorIfNeededAsync);
     }
 
+    private bool WakeVoiceGateSatisfied(AppSettings settings) =>
+        !settings.AutoCaptureWakeVoiceEnabled || settings.AutoCaptureWakeVoiceProfile is not null;
+
     private void RunOnAppDispatcher(Func<Task> action)
     {
         if (_dispatcher.CheckAccess())
@@ -256,6 +309,51 @@ public sealed class AutoCaptureService : IDisposable
             _settings = CopySettings(settings);
             _hasApiKey = hasApiKey;
         }
+
+        if (!settings.AutoCaptureWakeVoiceEnabled || settings.AutoCaptureWakeVoiceProfile is null)
+        {
+            ClearWakeVoiceBuffer();
+        }
+    }
+
+    private void AppendWakeVoiceSamples(IReadOnlyList<float> samples)
+    {
+        lock (_wakeVoiceBuffer)
+        {
+            _wakeVoiceBuffer.AddRange(samples);
+            var maxSampleCount = WakeVoiceMatcher.SampleRate * 4;
+            if (_wakeVoiceBuffer.Count > maxSampleCount)
+            {
+                _wakeVoiceBuffer.RemoveRange(0, _wakeVoiceBuffer.Count - maxSampleCount);
+            }
+        }
+    }
+
+    private double ScoreWakeVoice(WakeVoiceProfile profile)
+    {
+        lock (_wakeVoiceBuffer)
+        {
+            return _wakeVoiceMatcher.Score(_wakeVoiceBuffer, profile);
+        }
+    }
+
+    private void ClearWakeVoiceBuffer()
+    {
+        lock (_wakeVoiceBuffer)
+        {
+            _wakeVoiceBuffer.Clear();
+        }
+    }
+
+    private static float Peak(IReadOnlyList<float> samples)
+    {
+        var peak = 0f;
+        for (var index = 0; index < samples.Count; index++)
+        {
+            peak = Math.Max(peak, Math.Abs(samples[index]));
+        }
+
+        return peak;
     }
 
     private static AppSettings CopySettings(AppSettings settings) => new()
@@ -282,6 +380,9 @@ public sealed class AutoCaptureService : IDisposable
         AutoCaptureThreshold = settings.AutoCaptureThreshold,
         AutoCaptureSilenceMs = settings.AutoCaptureSilenceMs,
         AutoCaptureMinSpeechMs = settings.AutoCaptureMinSpeechMs,
-        AutoCaptureListeningEnabled = settings.AutoCaptureListeningEnabled
+        AutoCaptureListeningEnabled = settings.AutoCaptureListeningEnabled,
+        AutoCaptureWakeVoiceEnabled = settings.AutoCaptureWakeVoiceEnabled,
+        AutoCaptureWakeVoiceSensitivity = settings.AutoCaptureWakeVoiceSensitivity,
+        AutoCaptureWakeVoiceProfile = settings.AutoCaptureWakeVoiceProfile
     };
 }

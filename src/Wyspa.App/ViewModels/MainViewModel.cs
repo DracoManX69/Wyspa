@@ -14,6 +14,7 @@ public sealed class MainViewModel : ViewModelBase
     private readonly ISecretStore _secretStore;
     private readonly IGroqTranscriptionClient _groqClient;
     private readonly IAudioCaptureService _audioCapture;
+    private readonly IAudioLevelMonitorService _levelMonitor;
     private readonly IHotkeyService _hotkeyService;
     private readonly IHotkeyService _autoCaptureHotkeyService;
     private readonly IStartupService _startupService;
@@ -24,8 +25,13 @@ public sealed class MainViewModel : ViewModelBase
     private string _autoCaptureHotkeyText = HotkeySettings.DefaultAutoCapture.DisplayText;
     private string _scratchpadText = string.Empty;
     private string _scratchpadStatus = "Record a short clip to test Groq transcription without inserting text.";
+    private string _wakeVoiceStatus = "Record yourself saying hey whisper to gate AutoCapture locally.";
+    private readonly WakeVoiceMatcher _wakeVoiceMatcher = new();
+    private readonly List<float> _wakeVoiceSamples = [];
+    private CancellationTokenSource? _wakeVoiceRecordingCts;
     private bool _hasApiKey;
     private bool _isScratchpadRecording;
+    private bool _isWakeVoiceRecording;
     private bool _startWithWindows;
     private float _microphoneLevel;
     private DictationState _status = DictationState.Idle;
@@ -35,6 +41,7 @@ public sealed class MainViewModel : ViewModelBase
         ISecretStore secretStore,
         IGroqTranscriptionClient groqClient,
         IAudioCaptureService audioCapture,
+        IAudioLevelMonitorService levelMonitor,
         IHotkeyService hotkeyService,
         IHotkeyService autoCaptureHotkeyService,
         IStartupService startupService,
@@ -44,6 +51,7 @@ public sealed class MainViewModel : ViewModelBase
         _secretStore = secretStore;
         _groqClient = groqClient;
         _audioCapture = audioCapture;
+        _levelMonitor = levelMonitor;
         _hotkeyService = hotkeyService;
         _autoCaptureHotkeyService = autoCaptureHotkeyService;
         _startupService = startupService;
@@ -57,9 +65,11 @@ public sealed class MainViewModel : ViewModelBase
         RemoveKeyCommand = new AsyncRelayCommand(RemoveKeyAsync);
         RefreshDevicesCommand = new AsyncRelayCommand(LoadDevicesAsync);
         ScratchpadCommand = new AsyncRelayCommand(ToggleScratchpadAsync);
+        RecordWakeVoiceCommand = new AsyncRelayCommand(ToggleWakeVoiceRecordingAsync);
         ClearHistoryCommand = new RelayCommand(_ => ConnectionMessage = "History is off by default. Nothing was cleared.");
         _orchestrator.StateChanged += (_, state) => RunOnUi(() => Status = state);
         _audioCapture.LevelAvailable += (_, level) => UpdateMicrophoneLevel(level);
+        _levelMonitor.AudioAvailable += OnWakeVoiceAudioAvailable;
     }
 
     public event EventHandler? SettingsSaved;
@@ -74,6 +84,7 @@ public sealed class MainViewModel : ViewModelBase
     public ICommand TestConnectionCommand { get; }
     public ICommand ToggleListeningCommand { get; }
     public ICommand ScratchpadCommand { get; }
+    public ICommand RecordWakeVoiceCommand { get; }
     public ICommand RemoveKeyCommand { get; }
     public ICommand RefreshDevicesCommand { get; }
     public ICommand ClearHistoryCommand { get; }
@@ -127,6 +138,12 @@ public sealed class MainViewModel : ViewModelBase
         set => SetProperty(ref _scratchpadStatus, value);
     }
 
+    public string WakeVoiceStatus
+    {
+        get => _wakeVoiceStatus;
+        set => SetProperty(ref _wakeVoiceStatus, value);
+    }
+
     public bool IsScratchpadRecording
     {
         get => _isScratchpadRecording;
@@ -135,6 +152,18 @@ public sealed class MainViewModel : ViewModelBase
             if (SetProperty(ref _isScratchpadRecording, value))
             {
                 OnPropertyChanged(nameof(ScratchpadButtonText));
+            }
+        }
+    }
+
+    public bool IsWakeVoiceRecording
+    {
+        get => _isWakeVoiceRecording;
+        private set
+        {
+            if (SetProperty(ref _isWakeVoiceRecording, value))
+            {
+                OnPropertyChanged(nameof(WakeVoiceButtonText));
             }
         }
     }
@@ -180,6 +209,7 @@ public sealed class MainViewModel : ViewModelBase
     public string StatusText => Status.ToString();
     public string ToggleText => Status is DictationState.Listening ? "Stop Listening" : "Start Listening";
     public string ScratchpadButtonText => IsScratchpadRecording ? "Stop test recording" : "Start test recording";
+    public string WakeVoiceButtonText => IsWakeVoiceRecording ? "Recording..." : "Record wake phrase";
     public string MicrophoneLevelText => $"Live input {MicrophoneLevel:P0}";
     public bool CanListen => HasApiKey;
     public bool IsAutoCaptureMode => Settings.ActivationMode is ActivationMode.AutoCapture;
@@ -396,6 +426,106 @@ public sealed class MainViewModel : ViewModelBase
         }
     }
 
+    private async Task ToggleWakeVoiceRecordingAsync()
+    {
+        if (IsWakeVoiceRecording)
+        {
+            await StopWakeVoiceRecordingAsync(saveProfile: true);
+            return;
+        }
+
+        StartWakeVoiceRecording();
+    }
+
+    private void StartWakeVoiceRecording()
+    {
+        if (_audioCapture.IsRecording)
+        {
+            WakeVoiceStatus = "Stop the current dictation before recording a wake phrase.";
+            return;
+        }
+
+        lock (_wakeVoiceSamples)
+        {
+            _wakeVoiceSamples.Clear();
+        }
+
+        _wakeVoiceRecordingCts?.Cancel();
+        _wakeVoiceRecordingCts = new CancellationTokenSource();
+        IsWakeVoiceRecording = true;
+        WakeVoiceStatus = "Say hey whisper once in your normal voice.";
+        _ = AutoStopWakeVoiceRecordingAsync(_wakeVoiceRecordingCts.Token);
+    }
+
+    private async Task AutoStopWakeVoiceRecordingAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(2600, cancellationToken);
+            if (!cancellationToken.IsCancellationRequested)
+            {
+                await StopWakeVoiceRecordingAsync(saveProfile: true);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private async Task StopWakeVoiceRecordingAsync(bool saveProfile)
+    {
+        _wakeVoiceRecordingCts?.Cancel();
+        if (!IsWakeVoiceRecording)
+        {
+            return;
+        }
+
+        IsWakeVoiceRecording = false;
+        if (!saveProfile)
+        {
+            return;
+        }
+
+        float[] samples;
+        lock (_wakeVoiceSamples)
+        {
+            samples = [.. _wakeVoiceSamples];
+            _wakeVoiceSamples.Clear();
+        }
+
+        try
+        {
+            Settings.AutoCaptureWakeVoiceProfile = _wakeVoiceMatcher.CreateProfile(samples);
+            Settings.AutoCaptureWakeVoiceEnabled = true;
+            await SaveSettingsCoreAsync(registerHotkey: false, updateMessage: false);
+            WakeVoiceStatus = $"Wake phrase saved locally ({Settings.AutoCaptureWakeVoiceProfile.DurationMs} ms).";
+            ConnectionMessage = "Wake phrase saved. AutoCapture now waits for the local match.";
+            OnPropertyChanged(nameof(Settings));
+        }
+        catch (Exception ex)
+        {
+            WakeVoiceStatus = ex.Message;
+        }
+    }
+
+    private void OnWakeVoiceAudioAvailable(object? sender, IReadOnlyList<float> samples)
+    {
+        if (!IsWakeVoiceRecording)
+        {
+            return;
+        }
+
+        lock (_wakeVoiceSamples)
+        {
+            _wakeVoiceSamples.AddRange(samples);
+            var maxSampleCount = WakeVoiceMatcher.SampleRate * 3;
+            if (_wakeVoiceSamples.Count > maxSampleCount)
+            {
+                _wakeVoiceSamples.RemoveRange(0, _wakeVoiceSamples.Count - maxSampleCount);
+            }
+        }
+    }
+
     public async Task AutoSaveSettingsAsync(string? message = null)
     {
         await SaveSettingsCoreAsync(registerHotkey: false, updateMessage: false);
@@ -505,6 +635,7 @@ public sealed class MainViewModel : ViewModelBase
         Settings.AutoCaptureThreshold = Math.Clamp(Settings.AutoCaptureThreshold, 0.0f, 1.0f);
         Settings.AutoCaptureSilenceMs = Math.Clamp(Settings.AutoCaptureSilenceMs, 400, 5000);
         Settings.AutoCaptureMinSpeechMs = Math.Clamp(Settings.AutoCaptureMinSpeechMs, 250, 3000);
+        Settings.AutoCaptureWakeVoiceSensitivity = Math.Clamp(Settings.AutoCaptureWakeVoiceSensitivity, 0.45, 0.95);
         Settings.IntentConfidenceThreshold = Math.Clamp(Settings.IntentConfidenceThreshold, 0.1, 0.95);
     }
 
