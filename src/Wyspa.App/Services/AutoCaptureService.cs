@@ -210,7 +210,11 @@ public sealed class AutoCaptureService : IDisposable
             _isStarting = true;
             _wakeVoiceAcceptedUntil = DateTimeOffset.MinValue;
             _monitor.Stop();
-            _wakeTone.Play(settings);
+            if (settings.AutoCaptureWakeVoiceEnabled)
+            {
+                _wakeTone.Play(settings);
+            }
+
             _recordingStartedAt = DateTimeOffset.UtcNow;
             _lastVoiceAt = _recordingStartedAt;
             await _orchestrator.StartListeningAsync();

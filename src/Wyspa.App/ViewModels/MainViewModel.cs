@@ -10,6 +10,18 @@ namespace Wyspa.App.ViewModels;
 
 public sealed class MainViewModel : ViewModelBase
 {
+    private static readonly WakeTrainingPrompt[] WakeTrainingPrompts =
+    [
+        new("Hey Whisper.", WakeTrainingPromptKind.WakePhrase, 2800),
+        new("Hey Whisper, start listening.", WakeTrainingPromptKind.WakePhrase, 3400),
+        new("Hey Whisper, take a quick note.", WakeTrainingPromptKind.WakePhrase, 3600),
+        new("My voice should be recognized clearly, even when I speak at a normal pace.", WakeTrainingPromptKind.VoiceModel, 6200),
+        new("Wyspa listens for my wake phrase before it starts transcribing my words.", WakeTrainingPromptKind.VoiceModel, 6200),
+        new("Today I want short messages, longer notes, and commands to sound natural.", WakeTrainingPromptKind.VoiceModel, 6200),
+        new("The quick brown fox jumps over the lazy dog while I speak calmly.", WakeTrainingPromptKind.VoiceModel, 6200),
+        new("Hey Whisper.", WakeTrainingPromptKind.WakePhrase, 2800)
+    ];
+
     private readonly ISettingsService _settingsService;
     private readonly ISecretStore _secretStore;
     private readonly IGroqTranscriptionClient _groqClient;
@@ -29,6 +41,7 @@ public sealed class MainViewModel : ViewModelBase
     private readonly WakeVoiceMatcher _wakeVoiceMatcher = new();
     private readonly List<float> _wakeVoiceSamples = [];
     private CancellationTokenSource? _wakeVoiceRecordingCts;
+    private int _wakeTrainingPromptIndex;
     private bool _hasApiKey;
     private bool _isScratchpadRecording;
     private bool _isWakeVoiceRecording;
@@ -213,8 +226,10 @@ public sealed class MainViewModel : ViewModelBase
     public string ScratchpadButtonText => IsScratchpadRecording ? "Stop test recording" : "Start test recording";
     public string WakeVoiceButtonText => IsWakeVoiceRecording ? "Recording..." : "Record training sample";
     public string WakeTrainingText => Settings.AutoCaptureWakeVoiceProfile?.TrainingSampleCount is > 0
-        ? $"{Settings.AutoCaptureWakeVoiceProfile.TrainingSampleCount} local training sample(s)"
+        ? $"{Settings.AutoCaptureWakeVoiceProfile.TrainingSampleCount} wake sample(s), {Settings.AutoCaptureWakeVoiceProfile.VoiceTrainingSampleCount} voice sample(s)"
         : "No local wake training yet";
+    public string WakeTrainingProgressText => $"Prompt {_wakeTrainingPromptIndex + 1} of {WakeTrainingPrompts.Length}";
+    public string WakeTrainingPromptText => WakeTrainingPrompts[_wakeTrainingPromptIndex].Text;
     public string WakeToneText => string.IsNullOrWhiteSpace(Settings.WakeTonePath) ? "Default tone" : Settings.WakeTonePath;
     public string MicrophoneLevelText => $"Live input {MicrophoneLevel:P0}";
     public bool CanListen => HasApiKey;
@@ -459,7 +474,9 @@ public sealed class MainViewModel : ViewModelBase
         _wakeVoiceRecordingCts?.Cancel();
         _wakeVoiceRecordingCts = new CancellationTokenSource();
         IsWakeVoiceRecording = true;
-        WakeVoiceStatus = "Say hey whisper in a normal sentence, then pause.";
+        WakeVoiceStatus = WakeTrainingPrompts[_wakeTrainingPromptIndex].Kind is WakeTrainingPromptKind.WakePhrase
+            ? "Say the wake phrase, then pause."
+            : "Read the training sentence in your normal voice.";
         _ = AutoStopWakeVoiceRecordingAsync(_wakeVoiceRecordingCts.Token);
     }
 
@@ -467,7 +484,7 @@ public sealed class MainViewModel : ViewModelBase
     {
         try
         {
-            await Task.Delay(3400, cancellationToken);
+            await Task.Delay(WakeTrainingPrompts[_wakeTrainingPromptIndex].DurationMs, cancellationToken);
             if (!cancellationToken.IsCancellationRequested)
             {
                 await StopWakeVoiceRecordingAsync(saveProfile: true);
@@ -501,10 +518,14 @@ public sealed class MainViewModel : ViewModelBase
 
         try
         {
-            Settings.AutoCaptureWakeVoiceProfile = _wakeVoiceMatcher.AddTrainingSample(Settings.AutoCaptureWakeVoiceProfile, samples);
+            var prompt = WakeTrainingPrompts[_wakeTrainingPromptIndex];
+            Settings.AutoCaptureWakeVoiceProfile = prompt.Kind is WakeTrainingPromptKind.WakePhrase
+                ? _wakeVoiceMatcher.AddTrainingSample(Settings.AutoCaptureWakeVoiceProfile, samples)
+                : _wakeVoiceMatcher.AddVoiceTrainingSample(Settings.AutoCaptureWakeVoiceProfile, samples);
             Settings.AutoCaptureWakeVoiceEnabled = true;
             await SaveSettingsCoreAsync(registerHotkey: false, updateMessage: false);
-            WakeVoiceStatus = $"Training sample {Settings.AutoCaptureWakeVoiceProfile.TrainingSampleCount} saved locally. Add 3-5 samples for best matching.";
+            AdvanceWakeTrainingPrompt();
+            WakeVoiceStatus = $"Training saved locally. Next: {WakeTrainingPromptText}";
             ConnectionMessage = "Wake training updated. AutoCapture now waits for the local match.";
             OnPropertyChanged(nameof(Settings));
             OnPropertyChanged(nameof(WakeTrainingText));
@@ -545,11 +566,21 @@ public sealed class MainViewModel : ViewModelBase
     {
         Settings.AutoCaptureWakeVoiceProfile = null;
         Settings.AutoCaptureWakeVoiceEnabled = false;
+        _wakeTrainingPromptIndex = 0;
         await SaveSettingsCoreAsync(registerHotkey: false, updateMessage: false);
         WakeVoiceStatus = "Wake voice training cleared.";
         ConnectionMessage = "Wake voice training cleared.";
         OnPropertyChanged(nameof(Settings));
         OnPropertyChanged(nameof(WakeTrainingText));
+        OnPropertyChanged(nameof(WakeTrainingProgressText));
+        OnPropertyChanged(nameof(WakeTrainingPromptText));
+    }
+
+    private void AdvanceWakeTrainingPrompt()
+    {
+        _wakeTrainingPromptIndex = (_wakeTrainingPromptIndex + 1) % WakeTrainingPrompts.Length;
+        OnPropertyChanged(nameof(WakeTrainingProgressText));
+        OnPropertyChanged(nameof(WakeTrainingPromptText));
     }
 
     public async Task AutoSaveSettingsAsync(string? message = null)
@@ -627,6 +658,8 @@ public sealed class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(CanListen));
         OnPropertyChanged(nameof(WakeToneText));
         OnPropertyChanged(nameof(WakeTrainingText));
+        OnPropertyChanged(nameof(WakeTrainingProgressText));
+        OnPropertyChanged(nameof(WakeTrainingPromptText));
         SettingsChanged?.Invoke(this, EventArgs.Empty);
         AutoCaptureListeningChanged?.Invoke(this, EventArgs.Empty);
     }
@@ -654,6 +687,8 @@ public sealed class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(CanListen));
         OnPropertyChanged(nameof(WakeToneText));
         OnPropertyChanged(nameof(WakeTrainingText));
+        OnPropertyChanged(nameof(WakeTrainingProgressText));
+        OnPropertyChanged(nameof(WakeTrainingPromptText));
         SettingsChanged?.Invoke(this, EventArgs.Empty);
         SettingsSaved?.Invoke(this, EventArgs.Empty);
         AutoCaptureListeningChanged?.Invoke(this, EventArgs.Empty);
@@ -748,6 +783,14 @@ public sealed class MainViewModel : ViewModelBase
             HotkeyValidator.NormalizeKey(left.Key),
             HotkeyValidator.NormalizeKey(right.Key),
             StringComparison.OrdinalIgnoreCase);
+
+    private sealed record WakeTrainingPrompt(string Text, WakeTrainingPromptKind Kind, int DurationMs);
+
+    private enum WakeTrainingPromptKind
+    {
+        WakePhrase,
+        VoiceModel
+    }
 
     private static void RunOnUi(Action action)
     {

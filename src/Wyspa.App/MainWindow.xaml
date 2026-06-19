@@ -184,6 +184,13 @@
                                         Maximum="1"
                                         TickFrequency="0.01"
                                         Value="{Binding Settings.AutoCaptureWakeVoiceSensitivity, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="{Binding WakeTrainingProgressText}" Style="{StaticResource FieldLabel}" />
+                                <Border Style="{StaticResource Card}" Padding="8" Margin="0,0,0,5">
+                                    <TextBlock Text="{Binding WakeTrainingPromptText}"
+                                               Foreground="{DynamicResource InkBrush}"
+                                               TextWrapping="Wrap"
+                                               FontWeight="SemiBold" />
+                                </Border>
                                 <WrapPanel Margin="0,2,0,3">
                                     <Button Style="{StaticResource PrimaryButton}"
                                             Command="{Binding RecordWakeVoiceCommand}"

@@ -54,7 +54,46 @@ public sealed class WakeVoiceMatcher
             SegmentCount = SegmentCount,
             Features = AverageFeatures(featureSets),
             FeatureSets = featureSets,
-            TrainingSampleCount = Math.Min(8, Math.Max(1, existingProfile.TrainingSampleCount) + 1)
+            TrainingSampleCount = Math.Min(8, Math.Max(1, existingProfile.TrainingSampleCount) + 1),
+            VoiceFeatures = existingProfile.VoiceFeatures,
+            VoiceFeatureSets = existingProfile.VoiceFeatureSets,
+            VoiceTrainingSampleCount = existingProfile.VoiceTrainingSampleCount
+        };
+    }
+
+    public WakeVoiceProfile AddVoiceTrainingSample(WakeVoiceProfile? existingProfile, IReadOnlyList<float> samples)
+    {
+        var trimmed = TrimSilence(samples);
+        if (trimmed.Length < MinSampleCount)
+        {
+            throw new InvalidOperationException("Record a slightly longer training sentence.");
+        }
+
+        if (trimmed.Length > MaxSampleCount)
+        {
+            trimmed = trimmed[^MaxSampleCount..];
+        }
+
+        var voiceFeatures = BuildVoiceFeatures(trimmed);
+        var voiceFeatureSets = (existingProfile?.VoiceFeatureSets.Count > 0
+                ? existingProfile.VoiceFeatureSets
+                : existingProfile?.VoiceFeatures.Length > 0 ? [existingProfile.VoiceFeatures] : new List<double[]>())
+            .Append(voiceFeatures)
+            .TakeLast(8)
+            .Select(features => features.ToArray())
+            .ToList();
+
+        return new WakeVoiceProfile
+        {
+            SampleRate = SampleRate,
+            DurationMs = existingProfile?.DurationMs ?? 0,
+            SegmentCount = SegmentCount,
+            Features = existingProfile?.Features ?? [],
+            FeatureSets = existingProfile?.FeatureSets ?? [],
+            TrainingSampleCount = existingProfile?.TrainingSampleCount ?? 0,
+            VoiceFeatures = AverageFeatures(voiceFeatureSets),
+            VoiceFeatureSets = voiceFeatureSets,
+            VoiceTrainingSampleCount = Math.Min(8, (existingProfile?.VoiceTrainingSampleCount ?? 0) + 1)
         };
     }
 
@@ -80,7 +119,36 @@ public sealed class WakeVoiceMatcher
             }
         }
 
-        return best;
+        var voiceScore = VoiceScore(samples, profile);
+        return voiceScore <= 0 ? best : Math.Clamp(best * (0.85d + 0.15d * voiceScore), 0, 1);
+    }
+
+    public double VoiceScore(IReadOnlyList<float> samples, WakeVoiceProfile? profile)
+    {
+        if (profile is null || samples.Count < MinSampleCount)
+        {
+            return 0;
+        }
+
+        var featureSets = GetVoiceFeatureSets(profile).ToList();
+        if (featureSets.Count == 0)
+        {
+            return 0;
+        }
+
+        var trimmed = TrimSilence(samples);
+        if (trimmed.Length < MinSampleCount)
+        {
+            return 0;
+        }
+
+        if (trimmed.Length > MaxSampleCount)
+        {
+            trimmed = trimmed[^MaxSampleCount..];
+        }
+
+        var features = BuildVoiceFeatures(trimmed);
+        return featureSets.Max(featureSet => DistanceSimilarity(features, featureSet));
     }
 
     private static IEnumerable<double[]> GetFeatureSets(WakeVoiceProfile profile)
@@ -91,6 +159,16 @@ public sealed class WakeVoiceMatcher
         }
 
         return profile.Features.Length > 0 ? [profile.Features] : [];
+    }
+
+    private static IEnumerable<double[]> GetVoiceFeatureSets(WakeVoiceProfile profile)
+    {
+        if (profile.VoiceFeatureSets.Count > 0)
+        {
+            return profile.VoiceFeatureSets.Where(features => features.Length > 0);
+        }
+
+        return profile.VoiceFeatures.Length > 0 ? [profile.VoiceFeatures] : [];
     }
 
     private static double[] AverageFeatures(IReadOnlyList<double[]> featureSets)
@@ -251,6 +329,66 @@ public sealed class WakeVoiceMatcher
             for (var band = 0; band < BandCenters.Length; band++)
             {
                 features[offset + band + 2] /= bandTotal;
+            }
+        }
+
+        return features;
+    }
+
+    private static double[] BuildVoiceFeatures(IReadOnlyList<float> samples)
+    {
+        var features = new double[BandCenters.Length + 4];
+        var rms = 0d;
+        var crossings = 0;
+        var previousFrameRms = 0d;
+        var frameDelta = 0d;
+        var frameCount = 0;
+        var frameSize = Math.Max(1, SampleRate / 20);
+
+        for (var index = 0; index < samples.Count; index++)
+        {
+            rms += samples[index] * samples[index];
+            if (index > 0 && Math.Sign(samples[index]) != Math.Sign(samples[index - 1]))
+            {
+                crossings++;
+            }
+        }
+
+        for (var start = 0; start < samples.Count; start += frameSize)
+        {
+            var end = Math.Min(samples.Count, start + frameSize);
+            var frameRms = 0d;
+            for (var index = start; index < end; index++)
+            {
+                frameRms += samples[index] * samples[index];
+            }
+
+            frameRms = Math.Sqrt(frameRms / Math.Max(1, end - start));
+            if (frameCount > 0)
+            {
+                frameDelta += Math.Abs(frameRms - previousFrameRms);
+            }
+
+            previousFrameRms = frameRms;
+            frameCount++;
+        }
+
+        features[0] = Math.Sqrt(rms / samples.Count);
+        features[1] = crossings / (double)samples.Count * 8d;
+        features[2] = frameCount <= 1 ? 0 : frameDelta / (frameCount - 1);
+        features[3] = samples.Count / (double)MaxSampleCount;
+        var bandTotal = 0d;
+        for (var band = 0; band < BandCenters.Length; band++)
+        {
+            features[band + 4] = GoertzelMagnitude(samples, 0, samples.Count, BandCenters[band]);
+            bandTotal += features[band + 4];
+        }
+
+        if (bandTotal > double.Epsilon)
+        {
+            for (var band = 0; band < BandCenters.Length; band++)
+            {
+                features[band + 4] /= bandTotal;
             }
         }
 

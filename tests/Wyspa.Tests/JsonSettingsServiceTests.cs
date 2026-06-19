@@ -28,7 +28,10 @@ public sealed class JsonSettingsServiceTests
                 SegmentCount = 12,
                 Features = [0.1, 0.2, 0.3],
                 FeatureSets = [[0.1, 0.2, 0.3]],
-                TrainingSampleCount = 2
+                TrainingSampleCount = 2,
+                VoiceFeatures = [0.3, 0.2, 0.1],
+                VoiceFeatureSets = [[0.3, 0.2, 0.1]],
+                VoiceTrainingSampleCount = 4
             }
         };
 
@@ -51,6 +54,8 @@ public sealed class JsonSettingsServiceTests
         Assert.Equal(1200, loaded.AutoCaptureWakeVoiceProfile.DurationMs);
         Assert.Equal(2, loaded.AutoCaptureWakeVoiceProfile.TrainingSampleCount);
         Assert.Single(loaded.AutoCaptureWakeVoiceProfile.FeatureSets);
+        Assert.Equal(4, loaded.AutoCaptureWakeVoiceProfile.VoiceTrainingSampleCount);
+        Assert.Single(loaded.AutoCaptureWakeVoiceProfile.VoiceFeatureSets);
     }
 
     [Fact]
