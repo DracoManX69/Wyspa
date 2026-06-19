@@ -13,6 +13,7 @@ public sealed class AutoCaptureService : IDisposable
     private readonly IAudioCaptureService _audioCapture;
     private readonly DictationOrchestrator _orchestrator;
     private readonly OverlayStatusService _overlay;
+    private readonly WakeToneService _wakeTone;
     private readonly WakeVoiceMatcher _wakeVoiceMatcher = new();
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly object _settingsLock = new();
@@ -35,7 +36,8 @@ public sealed class AutoCaptureService : IDisposable
         IAudioLevelMonitorService monitor,
         IAudioCaptureService audioCapture,
         DictationOrchestrator orchestrator,
-        OverlayStatusService overlay)
+        OverlayStatusService overlay,
+        WakeToneService wakeTone)
     {
         _settingsService = settingsService;
         _secretStore = secretStore;
@@ -43,6 +45,7 @@ public sealed class AutoCaptureService : IDisposable
         _audioCapture = audioCapture;
         _orchestrator = orchestrator;
         _overlay = overlay;
+        _wakeTone = wakeTone;
         _dispatcher = System.Windows.Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
         _monitor.LevelAvailable += OnMonitorLevel;
         _monitor.AudioAvailable += OnMonitorAudio;
@@ -207,6 +210,7 @@ public sealed class AutoCaptureService : IDisposable
             _isStarting = true;
             _wakeVoiceAcceptedUntil = DateTimeOffset.MinValue;
             _monitor.Stop();
+            _wakeTone.Play(settings);
             _recordingStartedAt = DateTimeOffset.UtcNow;
             _lastVoiceAt = _recordingStartedAt;
             await _orchestrator.StartListeningAsync();
@@ -388,6 +392,8 @@ public sealed class AutoCaptureService : IDisposable
         AutoCaptureListeningEnabled = settings.AutoCaptureListeningEnabled,
         AutoCaptureWakeVoiceEnabled = settings.AutoCaptureWakeVoiceEnabled,
         AutoCaptureWakeVoiceSensitivity = settings.AutoCaptureWakeVoiceSensitivity,
-        AutoCaptureWakeVoiceProfile = settings.AutoCaptureWakeVoiceProfile
+        AutoCaptureWakeVoiceProfile = settings.AutoCaptureWakeVoiceProfile,
+        WakeToneEnabled = settings.WakeToneEnabled,
+        WakeTonePath = settings.WakeTonePath
     };
 }

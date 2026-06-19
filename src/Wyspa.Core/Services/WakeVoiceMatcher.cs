@@ -29,7 +29,32 @@ public sealed class WakeVoiceMatcher
             SampleRate = SampleRate,
             DurationMs = (int)Math.Round(trimmed.Length * 1000d / SampleRate),
             SegmentCount = SegmentCount,
-            Features = features
+            Features = features,
+            FeatureSets = [features],
+            TrainingSampleCount = 1
+        };
+    }
+
+    public WakeVoiceProfile AddTrainingSample(WakeVoiceProfile? existingProfile, IReadOnlyList<float> samples)
+    {
+        var sampleProfile = CreateProfile(samples);
+        if (existingProfile is null ||
+            existingProfile.SampleRate != SampleRate ||
+            existingProfile.SegmentCount != SegmentCount)
+        {
+            return sampleProfile;
+        }
+
+        var featureSets = GetFeatureSets(existingProfile).Append(sampleProfile.Features).TakeLast(8).Select(features => features.ToArray()).ToList();
+        return new WakeVoiceProfile
+        {
+            SampleRate = SampleRate,
+            DurationMs = (int)Math.Round((existingProfile.DurationMs * Math.Max(1, existingProfile.TrainingSampleCount) + sampleProfile.DurationMs) /
+                (double)(Math.Max(1, existingProfile.TrainingSampleCount) + 1)),
+            SegmentCount = SegmentCount,
+            Features = AverageFeatures(featureSets),
+            FeatureSets = featureSets,
+            TrainingSampleCount = Math.Min(8, Math.Max(1, existingProfile.TrainingSampleCount) + 1)
         };
     }
 
@@ -45,7 +70,52 @@ public sealed class WakeVoiceMatcher
         }
 
         var targetSampleCount = Math.Clamp(profile.DurationMs * SampleRate / 1000, MinSampleCount, MaxSampleCount);
-        return BestRecentWindowScore(samples, profile.Features, targetSampleCount);
+        var best = 0d;
+        foreach (var featureSet in GetFeatureSets(profile))
+        {
+            best = Math.Max(best, BestRecentWindowScore(samples, featureSet, targetSampleCount));
+            if (best >= 0.995)
+            {
+                return best;
+            }
+        }
+
+        return best;
+    }
+
+    private static IEnumerable<double[]> GetFeatureSets(WakeVoiceProfile profile)
+    {
+        if (profile.FeatureSets.Count > 0)
+        {
+            return profile.FeatureSets.Where(features => features.Length > 0);
+        }
+
+        return profile.Features.Length > 0 ? [profile.Features] : [];
+    }
+
+    private static double[] AverageFeatures(IReadOnlyList<double[]> featureSets)
+    {
+        if (featureSets.Count == 0)
+        {
+            return [];
+        }
+
+        var length = featureSets.Min(features => features.Length);
+        var average = new double[length];
+        foreach (var features in featureSets)
+        {
+            for (var index = 0; index < length; index++)
+            {
+                average[index] += features[index];
+            }
+        }
+
+        for (var index = 0; index < average.Length; index++)
+        {
+            average[index] /= featureSets.Count;
+        }
+
+        return average;
     }
 
     private static double BestRecentWindowScore(IReadOnlyList<float> samples, IReadOnlyList<double> profileFeatures, int targetSampleCount)

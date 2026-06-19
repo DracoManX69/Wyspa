@@ -102,6 +102,7 @@ public partial class App : System.Windows.Application
             var keyboardCommandService = new WindowsKeyboardCommandService();
             var startupService = new WindowsStartupService(Environment.ProcessPath ?? Process.GetCurrentProcess().MainModule?.FileName ?? "Wyspa.exe");
             var overlayService = new OverlayStatusService(() => _overlay ??= new StatusOverlayWindow());
+            var wakeToneService = new WakeToneService();
 
             var orchestrator = new DictationOrchestrator(
                 settingsService,
@@ -114,7 +115,7 @@ public partial class App : System.Windows.Application
                 overlayService);
 
             _viewModel = new MainViewModel(settingsService, secretStore, groqClient, _audioCapture, _levelMonitor, _hotkeyService, _autoCaptureHotkeyService, startupService, orchestrator);
-            _autoCaptureService = new AutoCaptureService(settingsService, secretStore, _levelMonitor, _audioCapture, orchestrator, overlayService);
+            _autoCaptureService = new AutoCaptureService(settingsService, secretStore, _levelMonitor, _audioCapture, orchestrator, overlayService, wakeToneService);
             _trayService = new TrayService(_viewModel, startupService, ShowMainWindow, QuitAsync);
             overlayService.NotificationRequested += (_, message) => _trayService?.ShowNotification(message);
             _audioCapture.LevelAvailable += (_, level) => Dispatcher.BeginInvoke(() =>

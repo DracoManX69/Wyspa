@@ -41,6 +41,19 @@ public sealed class WakeVoiceMatcherTests
         Assert.True(score > 0.8);
     }
 
+    [Fact]
+    public void AddTrainingSample_AccumulatesLocalWakeExamples()
+    {
+        var matcher = new WakeVoiceMatcher();
+        var profile = matcher.AddTrainingSample(null, BuildPhrase([220, 440, 330]));
+
+        profile = matcher.AddTrainingSample(profile, BuildPhrase([240, 460, 350]));
+
+        Assert.Equal(2, profile.TrainingSampleCount);
+        Assert.Equal(2, profile.FeatureSets.Count);
+        Assert.True(matcher.Score(BuildPhrase([240, 460, 350]), profile) > 0.8);
+    }
+
     private static float[] BuildPhrase(double[] frequencies)
     {
         var segmentLength = WakeVoiceMatcher.SampleRate / 2;

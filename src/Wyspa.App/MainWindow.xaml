@@ -188,8 +188,19 @@
                                     <Button Style="{StaticResource PrimaryButton}"
                                             Command="{Binding RecordWakeVoiceCommand}"
                                             Content="{Binding WakeVoiceButtonText}" />
+                                    <Button Command="{Binding ResetWakeVoiceCommand}"
+                                            Content="Reset training" />
                                 </WrapPanel>
+                                <TextBlock Text="{Binding WakeTrainingText}" Style="{StaticResource BodyText}" Margin="0,0,0,3" />
                                 <TextBlock Text="{Binding WakeVoiceStatus}" Style="{StaticResource BodyText}" Margin="0,0,0,5" />
+                                <TextBlock Text="Wake accepted tone" Style="{StaticResource FieldLabel}" />
+                                <CheckBox Content="Play a short tone when Wyspa starts listening" IsChecked="{Binding Settings.WakeToneEnabled}" />
+                                <TextBlock Text="{Binding WakeToneText}" Style="{StaticResource BodyText}" TextTrimming="CharacterEllipsis" Margin="0,0,0,3" />
+                                <WrapPanel Margin="0,0,0,6">
+                                    <Button Click="ChooseWakeToneButton_OnClick" Content="Choose WAV" />
+                                    <Button Click="ResetWakeToneButton_OnClick" Content="Use default" />
+                                    <Button Click="TestWakeToneButton_OnClick" Content="Test tone" />
+                                </WrapPanel>
                                 <TextBlock Text="Current shortcut" Style="{StaticResource FieldLabel}" />
                                 <Grid>
                                     <Grid.ColumnDefinitions>

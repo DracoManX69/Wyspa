@@ -66,6 +66,7 @@ public sealed class MainViewModel : ViewModelBase
         RefreshDevicesCommand = new AsyncRelayCommand(LoadDevicesAsync);
         ScratchpadCommand = new AsyncRelayCommand(ToggleScratchpadAsync);
         RecordWakeVoiceCommand = new AsyncRelayCommand(ToggleWakeVoiceRecordingAsync);
+        ResetWakeVoiceCommand = new AsyncRelayCommand(ResetWakeVoiceTrainingAsync);
         ClearHistoryCommand = new RelayCommand(_ => ConnectionMessage = "History is off by default. Nothing was cleared.");
         _orchestrator.StateChanged += (_, state) => RunOnUi(() => Status = state);
         _audioCapture.LevelAvailable += (_, level) => UpdateMicrophoneLevel(level);
@@ -85,6 +86,7 @@ public sealed class MainViewModel : ViewModelBase
     public ICommand ToggleListeningCommand { get; }
     public ICommand ScratchpadCommand { get; }
     public ICommand RecordWakeVoiceCommand { get; }
+    public ICommand ResetWakeVoiceCommand { get; }
     public ICommand RemoveKeyCommand { get; }
     public ICommand RefreshDevicesCommand { get; }
     public ICommand ClearHistoryCommand { get; }
@@ -209,7 +211,11 @@ public sealed class MainViewModel : ViewModelBase
     public string StatusText => Status.ToString();
     public string ToggleText => Status is DictationState.Listening ? "Stop Listening" : "Start Listening";
     public string ScratchpadButtonText => IsScratchpadRecording ? "Stop test recording" : "Start test recording";
-    public string WakeVoiceButtonText => IsWakeVoiceRecording ? "Recording..." : "Record wake phrase";
+    public string WakeVoiceButtonText => IsWakeVoiceRecording ? "Recording..." : "Record training sample";
+    public string WakeTrainingText => Settings.AutoCaptureWakeVoiceProfile?.TrainingSampleCount is > 0
+        ? $"{Settings.AutoCaptureWakeVoiceProfile.TrainingSampleCount} local training sample(s)"
+        : "No local wake training yet";
+    public string WakeToneText => string.IsNullOrWhiteSpace(Settings.WakeTonePath) ? "Default tone" : Settings.WakeTonePath;
     public string MicrophoneLevelText => $"Live input {MicrophoneLevel:P0}";
     public bool CanListen => HasApiKey;
     public bool IsAutoCaptureMode => Settings.ActivationMode is ActivationMode.AutoCapture;
@@ -453,7 +459,7 @@ public sealed class MainViewModel : ViewModelBase
         _wakeVoiceRecordingCts?.Cancel();
         _wakeVoiceRecordingCts = new CancellationTokenSource();
         IsWakeVoiceRecording = true;
-        WakeVoiceStatus = "Say hey whisper once in your normal voice.";
+        WakeVoiceStatus = "Say hey whisper in a normal sentence, then pause.";
         _ = AutoStopWakeVoiceRecordingAsync(_wakeVoiceRecordingCts.Token);
     }
 
@@ -461,7 +467,7 @@ public sealed class MainViewModel : ViewModelBase
     {
         try
         {
-            await Task.Delay(2600, cancellationToken);
+            await Task.Delay(3400, cancellationToken);
             if (!cancellationToken.IsCancellationRequested)
             {
                 await StopWakeVoiceRecordingAsync(saveProfile: true);
@@ -495,12 +501,13 @@ public sealed class MainViewModel : ViewModelBase
 
         try
         {
-            Settings.AutoCaptureWakeVoiceProfile = _wakeVoiceMatcher.CreateProfile(samples);
+            Settings.AutoCaptureWakeVoiceProfile = _wakeVoiceMatcher.AddTrainingSample(Settings.AutoCaptureWakeVoiceProfile, samples);
             Settings.AutoCaptureWakeVoiceEnabled = true;
             await SaveSettingsCoreAsync(registerHotkey: false, updateMessage: false);
-            WakeVoiceStatus = $"Wake phrase saved locally ({Settings.AutoCaptureWakeVoiceProfile.DurationMs} ms). Start around 60% strictness and adjust from there.";
-            ConnectionMessage = "Wake phrase saved. AutoCapture now waits for the local match.";
+            WakeVoiceStatus = $"Training sample {Settings.AutoCaptureWakeVoiceProfile.TrainingSampleCount} saved locally. Add 3-5 samples for best matching.";
+            ConnectionMessage = "Wake training updated. AutoCapture now waits for the local match.";
             OnPropertyChanged(nameof(Settings));
+            OnPropertyChanged(nameof(WakeTrainingText));
         }
         catch (Exception ex)
         {
@@ -518,12 +525,31 @@ public sealed class MainViewModel : ViewModelBase
         lock (_wakeVoiceSamples)
         {
             _wakeVoiceSamples.AddRange(samples);
-            var maxSampleCount = WakeVoiceMatcher.SampleRate * 3;
+            var maxSampleCount = WakeVoiceMatcher.SampleRate * 4;
             if (_wakeVoiceSamples.Count > maxSampleCount)
             {
                 _wakeVoiceSamples.RemoveRange(0, _wakeVoiceSamples.Count - maxSampleCount);
             }
         }
+    }
+
+    public async Task SetWakeTonePathAsync(string? path)
+    {
+        Settings.WakeTonePath = string.IsNullOrWhiteSpace(path) ? null : path;
+        await AutoSaveSettingsAsync(Settings.WakeTonePath is null ? "Using the default wake tone." : "Custom wake tone saved.");
+        OnPropertyChanged(nameof(Settings));
+        OnPropertyChanged(nameof(WakeToneText));
+    }
+
+    private async Task ResetWakeVoiceTrainingAsync()
+    {
+        Settings.AutoCaptureWakeVoiceProfile = null;
+        Settings.AutoCaptureWakeVoiceEnabled = false;
+        await SaveSettingsCoreAsync(registerHotkey: false, updateMessage: false);
+        WakeVoiceStatus = "Wake voice training cleared.";
+        ConnectionMessage = "Wake voice training cleared.";
+        OnPropertyChanged(nameof(Settings));
+        OnPropertyChanged(nameof(WakeTrainingText));
     }
 
     public async Task AutoSaveSettingsAsync(string? message = null)
@@ -599,6 +625,8 @@ public sealed class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsAutoCaptureMode));
         OnPropertyChanged(nameof(IsAutoCaptureListening));
         OnPropertyChanged(nameof(CanListen));
+        OnPropertyChanged(nameof(WakeToneText));
+        OnPropertyChanged(nameof(WakeTrainingText));
         SettingsChanged?.Invoke(this, EventArgs.Empty);
         AutoCaptureListeningChanged?.Invoke(this, EventArgs.Empty);
     }
@@ -624,6 +652,8 @@ public sealed class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsAutoCaptureMode));
         OnPropertyChanged(nameof(IsAutoCaptureListening));
         OnPropertyChanged(nameof(CanListen));
+        OnPropertyChanged(nameof(WakeToneText));
+        OnPropertyChanged(nameof(WakeTrainingText));
         SettingsChanged?.Invoke(this, EventArgs.Empty);
         SettingsSaved?.Invoke(this, EventArgs.Empty);
         AutoCaptureListeningChanged?.Invoke(this, EventArgs.Empty);

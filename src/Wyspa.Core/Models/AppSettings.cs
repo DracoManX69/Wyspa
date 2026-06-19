@@ -29,4 +29,6 @@ public sealed class AppSettings
     public bool AutoCaptureWakeVoiceEnabled { get; set; }
     public double AutoCaptureWakeVoiceSensitivity { get; set; } = 0.62;
     public WakeVoiceProfile? AutoCaptureWakeVoiceProfile { get; set; }
+    public bool WakeToneEnabled { get; set; } = true;
+    public string? WakeTonePath { get; set; }
 }

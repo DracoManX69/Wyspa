@@ -16,6 +16,8 @@ public sealed class JsonSettingsServiceTests
             Language = "en",
             StartMinimized = true,
             CopyInsertedTextToClipboard = true,
+            WakeToneEnabled = true,
+            WakeTonePath = @"C:\Sounds\wake.wav",
             Hotkey = new HotkeySettings(HotkeyModifiers.Control | HotkeyModifiers.Shift, "F8"),
             AutoCaptureHotkey = new HotkeySettings(HotkeyModifiers.Control | HotkeyModifiers.Alt, "A"),
             AutoCaptureWakeVoiceEnabled = true,
@@ -24,7 +26,9 @@ public sealed class JsonSettingsServiceTests
             {
                 DurationMs = 1200,
                 SegmentCount = 12,
-                Features = [0.1, 0.2, 0.3]
+                Features = [0.1, 0.2, 0.3],
+                FeatureSets = [[0.1, 0.2, 0.3]],
+                TrainingSampleCount = 2
             }
         };
 
@@ -35,6 +39,8 @@ public sealed class JsonSettingsServiceTests
         Assert.Equal("en", loaded.Language);
         Assert.True(loaded.StartMinimized);
         Assert.True(loaded.CopyInsertedTextToClipboard);
+        Assert.True(loaded.WakeToneEnabled);
+        Assert.Equal(@"C:\Sounds\wake.wav", loaded.WakeTonePath);
         Assert.Equal("F8", loaded.Hotkey.Key);
         Assert.Equal(HotkeyModifiers.Control | HotkeyModifiers.Shift, loaded.Hotkey.Modifiers);
         Assert.Equal("A", loaded.AutoCaptureHotkey.Key);
@@ -43,6 +49,8 @@ public sealed class JsonSettingsServiceTests
         Assert.Equal(0.81, loaded.AutoCaptureWakeVoiceSensitivity);
         Assert.NotNull(loaded.AutoCaptureWakeVoiceProfile);
         Assert.Equal(1200, loaded.AutoCaptureWakeVoiceProfile.DurationMs);
+        Assert.Equal(2, loaded.AutoCaptureWakeVoiceProfile.TrainingSampleCount);
+        Assert.Single(loaded.AutoCaptureWakeVoiceProfile.FeatureSets);
     }
 
     [Fact]

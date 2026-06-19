@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Microsoft.Win32;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Navigation;
@@ -56,6 +57,43 @@ public partial class MainWindow : Window
 
         _scratchpadWindow.Show();
         _scratchpadWindow.Activate();
+    }
+
+    private async void ChooseWakeToneButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Choose wake tone",
+            Filter = "WAV audio (*.wav)|*.wav",
+            CheckFileExists = true,
+            Multiselect = false
+        };
+
+        if (dialog.ShowDialog(this) == true)
+        {
+            await viewModel.SetWakeTonePathAsync(dialog.FileName);
+        }
+    }
+
+    private async void ResetWakeToneButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainViewModel viewModel)
+        {
+            await viewModel.SetWakeTonePathAsync(null);
+        }
+    }
+
+    private void TestWakeToneButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainViewModel viewModel)
+        {
+            new WakeToneService().Play(viewModel.Settings);
+        }
     }
 
     private void HotkeyRecorderBox_OnGotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
