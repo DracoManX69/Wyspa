@@ -42,11 +42,21 @@
                         </TabItem.Header>
                         <ScrollViewer Padding="8">
                             <StackPanel MaxWidth="420" HorizontalAlignment="Left">
-                                    <TextBlock Text="Control Center" Style="{StaticResource SectionTitle}" />
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                        <TextBlock Text="Control Center" Style="{StaticResource SectionTitle}" Margin="0" />
+                                        <Border Style="{StaticResource HeaderHelpIcon}" ToolTip="Quick access to dictation, Groq setup links, and the scratchpad test area.">
+                                            <TextBlock Style="{StaticResource HeaderHelpText}" />
+                                        </Border>
+                                    </StackPanel>
                                     <TextBlock Text="Start dictation and check your current setup." Style="{StaticResource BodyText}" Margin="0,0,0,5" />
                                     <Border Style="{StaticResource Card}" Margin="0,0,0,7">
                                         <StackPanel>
-                                            <TextBlock Text="Dictation" Foreground="{DynamicResource InkBrush}" FontWeight="SemiBold" />
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="Dictation" Foreground="{DynamicResource InkBrush}" FontWeight="SemiBold" />
+                                                <Border Style="{StaticResource HeaderHelpIcon}" ToolTip="Starts or stops dictation using your configured trigger mode and hotkey.">
+                                                    <TextBlock Style="{StaticResource HeaderHelpText}" />
+                                                </Border>
+                                            </StackPanel>
                                             <TextBlock Text="{Binding HotkeyText}" Foreground="{DynamicResource MutedBrush}" FontSize="12" Margin="0,1,0,5" />
                                             <Button Style="{StaticResource PrimaryButton}" Command="{Binding ToggleListeningCommand}" IsEnabled="{Binding CanListen}" HorizontalAlignment="Left">
                                                 <StackPanel Orientation="Horizontal">
@@ -58,10 +68,15 @@
                                     </Border>
                                     <Border Style="{StaticResource Card}" Margin="0,0,0,7">
                                         <StackPanel>
-                                            <TextBlock Text="Groq Setup" Foreground="{DynamicResource InkBrush}" FontWeight="SemiBold" />
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="Groq Setup" Foreground="{DynamicResource InkBrush}" FontWeight="SemiBold" />
+                                                <Border Style="{StaticResource HeaderHelpIcon}" ToolTip="Links to Groq pages for creating the API Key Wyspa uses for transcription.">
+                                                    <TextBlock Style="{StaticResource HeaderHelpText}" />
+                                                </Border>
+                                            </StackPanel>
                                             <TextBlock Text="Create an API Key, paste it in Groq, then test the connection." Style="{StaticResource BodyText}" Margin="0,2,0,4" />
                                             <TextBlock Style="{StaticResource BodyText}">
-                                                <Hyperlink NavigateUri="https://groq.com/" RequestNavigate="Hyperlink_OnRequestNavigate">Groq website</Hyperlink>
+                                                <Hyperlink NavigateUri="https://groq.com/" RequestNavigate="Hyperlink_OnRequestNavigate">Groq Website</Hyperlink>
                                                 <Run Text="  |  " />
                                                 <Hyperlink NavigateUri="https://console.groq.com/keys" RequestNavigate="Hyperlink_OnRequestNavigate">API Keys</Hyperlink>
                                             </TextBlock>
@@ -69,12 +84,17 @@
                                     </Border>
                                     <Border Style="{StaticResource Card}">
                                         <StackPanel>
-                                            <TextBlock Text="Scratchpad" Foreground="{DynamicResource InkBrush}" FontWeight="SemiBold" />
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="Scratchpad" Foreground="{DynamicResource InkBrush}" FontWeight="SemiBold" />
+                                                <Border Style="{StaticResource HeaderHelpIcon}" ToolTip="Opens a test area for checking transcription and re-write output without inserting text into another app.">
+                                                    <TextBlock Style="{StaticResource HeaderHelpText}" />
+                                                </Border>
+                                            </StackPanel>
                                             <TextBlock Text="Open a compact test pad for Groq transcription without inserting text." Style="{StaticResource BodyText}" Margin="0,2,0,5" />
                                             <Button Style="{StaticResource PrimaryButton}" Click="OpenScratchpadButton_OnClick" HorizontalAlignment="Left">
                                                 <StackPanel Orientation="Horizontal">
                                                     <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Text="&#xE9A1;" Margin="0,0,7,0" />
-                                                    <TextBlock Text="Open scratchpad" />
+                                                    <TextBlock Text="Open Scratchpad" />
                                                 </StackPanel>
                                             </Button>
                                         </StackPanel>
@@ -94,7 +114,12 @@
                             <StackPanel MaxWidth="430" HorizontalAlignment="Left">
                                 <Border Style="{StaticResource Card}" Margin="0,0,0,7">
                                     <StackPanel>
-                                        <TextBlock Text="Get an API Key" Foreground="{DynamicResource InkBrush}" FontWeight="SemiBold" />
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="Get an API Key" Foreground="{DynamicResource InkBrush}" FontWeight="SemiBold" />
+                                            <Border Style="{StaticResource HeaderHelpIcon}" ToolTip="Use these links to create a Groq API Key, then paste it into Wyspa.">
+                                                <TextBlock Style="{StaticResource HeaderHelpText}" />
+                                            </Border>
+                                        </StackPanel>
                                         <TextBlock Style="{StaticResource BodyText}" Margin="0,3,0,0">
                                             <Run Text="Open " />
                                             <Hyperlink NavigateUri="https://groq.com/" RequestNavigate="Hyperlink_OnRequestNavigate">Groq</Hyperlink>
@@ -104,23 +129,32 @@
                                         </TextBlock>
                                     </StackPanel>
                                 </Border>
-                                <TextBlock Text="Groq Connection" Style="{StaticResource SectionTitle}" />
-                                <TextBlock Text="API Key" Style="{StaticResource FieldLabel}" />
-                                <PasswordBox x:Name="ApiKeyBox"
-                                             PasswordChanged="ApiKeyBox_OnPasswordChanged"
-                                             GotKeyboardFocus="ApiKeyBox_OnGotKeyboardFocus"
-                                             LostKeyboardFocus="ApiKeyBox_OnLostKeyboardFocus" />
-                                <WrapPanel>
-                                    <Button Style="{StaticResource PrimaryButton}" Command="{Binding TestConnectionCommand}" Content="Test Connection" />
-                                    <Button Command="{Binding RemoveKeyCommand}" Content="Remove Key" />
-                                </WrapPanel>
-                                <TextBlock Text="{Binding ConnectionMessage}" Style="{StaticResource BodyText}" />
-                                <TextBlock Text="Model" Style="{StaticResource FieldLabel}" />
-                                <TextBox Text="{Binding Settings.ModelId, UpdateSourceTrigger=PropertyChanged}" />
-                                <TextBlock Text="Language" Style="{StaticResource FieldLabel}" />
-                                <TextBox Text="{Binding Settings.Language, UpdateSourceTrigger=PropertyChanged}" />
-                                <TextBlock Text="Vocabulary Prompt" Style="{StaticResource FieldLabel}" />
-                                <TextBox Text="{Binding Settings.CustomPrompt, UpdateSourceTrigger=PropertyChanged}" MaxLength="500" AcceptsReturn="True" Height="48" TextWrapping="Wrap" />
+                                <Border Style="{StaticResource Card}">
+                                    <StackPanel>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="Groq Connection" Foreground="{DynamicResource InkBrush}" FontWeight="SemiBold" />
+                                            <Border Style="{StaticResource HeaderHelpIcon}" ToolTip="Stores and tests your Groq API Key, plus transcription model, language, and vocabulary hints.">
+                                                <TextBlock Style="{StaticResource HeaderHelpText}" />
+                                            </Border>
+                                        </StackPanel>
+                                        <TextBlock Text="API Key" Style="{StaticResource FieldLabel}" />
+                                        <PasswordBox x:Name="ApiKeyBox"
+                                                     PasswordChanged="ApiKeyBox_OnPasswordChanged"
+                                                     GotKeyboardFocus="ApiKeyBox_OnGotKeyboardFocus"
+                                                     LostKeyboardFocus="ApiKeyBox_OnLostKeyboardFocus" />
+                                        <WrapPanel>
+                                            <Button Style="{StaticResource PrimaryButton}" Command="{Binding TestConnectionCommand}" Content="Test Connection" />
+                                            <Button Command="{Binding RemoveKeyCommand}" Content="Remove Key" />
+                                        </WrapPanel>
+                                        <TextBlock Text="{Binding ConnectionMessage}" Style="{StaticResource BodyText}" />
+                                        <TextBlock Text="Model" Style="{StaticResource FieldLabel}" />
+                                        <TextBox Text="{Binding Settings.ModelId, UpdateSourceTrigger=PropertyChanged}" />
+                                        <TextBlock Text="Language" Style="{StaticResource FieldLabel}" />
+                                        <TextBox Text="{Binding Settings.Language, UpdateSourceTrigger=PropertyChanged}" />
+                                        <TextBlock Text="Vocabulary Prompt" Style="{StaticResource FieldLabel}" />
+                                        <TextBox Text="{Binding Settings.CustomPrompt, UpdateSourceTrigger=PropertyChanged}" MaxLength="500" AcceptsReturn="True" Height="48" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
                             </StackPanel>
                         </ScrollViewer>
                     </TabItem>
@@ -134,46 +168,102 @@
                         </TabItem.Header>
                         <ScrollViewer Padding="8">
                             <StackPanel MaxWidth="560" HorizontalAlignment="Left">
-                                <TextBlock Text="Microphone" Style="{StaticResource SectionTitle}" />
-                                <ComboBox ItemsSource="{Binding Devices}"
-                                          SelectedValue="{Binding Settings.MicrophoneDeviceId, UpdateSourceTrigger=PropertyChanged}"
-                                          SelectedValuePath="Id"
-                                          DisplayMemberPath="Name" />
-                                <WrapPanel Margin="0,0,0,8">
-                                    <Button Command="{Binding RefreshDevicesCommand}" Content="Refresh" />
-                                </WrapPanel>
+                                <Border Style="{StaticResource Card}" Margin="0,0,0,7">
+                                    <StackPanel>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="Microphone" Foreground="{DynamicResource InkBrush}" FontWeight="SemiBold" />
+                                            <Border Style="{StaticResource HeaderHelpIcon}" ToolTip="Select the microphone Wyspa records from and refresh the device list if Windows audio devices change.">
+                                                <TextBlock Style="{StaticResource HeaderHelpText}" />
+                                            </Border>
+                                        </StackPanel>
+                                        <ComboBox ItemsSource="{Binding Devices}"
+                                                  SelectedValue="{Binding Settings.MicrophoneDeviceId, UpdateSourceTrigger=PropertyChanged}"
+                                                  SelectedValuePath="Id"
+                                                  DisplayMemberPath="Name" />
+                                        <WrapPanel Margin="0,0,0,0">
+                                            <Button Command="{Binding RefreshDevicesCommand}" Content="Refresh" />
+                                        </WrapPanel>
+                                    </StackPanel>
+                                </Border>
 
-                                <TextBlock Text="Shortcut" Style="{StaticResource SectionTitle}" />
-                                <TextBlock Text="Mode" Style="{StaticResource FieldLabel}" />
-                                <ComboBox SelectedValue="{Binding Settings.ActivationMode}" SelectedValuePath="Tag">
-                                    <ComboBoxItem Content="Toggle" Tag="{x:Static models:ActivationMode.Toggle}" />
-                                    <ComboBoxItem Content="Hold to talk" Tag="{x:Static models:ActivationMode.HoldToTalk}" />
-                                    <ComboBoxItem Content="AutoCapture" Tag="{x:Static models:ActivationMode.AutoCapture}" />
-                                </ComboBox>
-                                <TextBlock Text="AutoCapture Calibration" Style="{StaticResource FieldLabel}" />
-                                <Grid Margin="0,0,0,2">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Text="{Binding MicrophoneLevelText}" Style="{StaticResource BodyText}" />
-                                    <TextBlock Grid.Column="1"
-                                               Style="{StaticResource BodyText}"
-                                               Text="{Binding Value, ElementName=AutoCaptureThresholdSlider, StringFormat=Trigger {0:P0}}" />
-                                </Grid>
-                                <ProgressBar Minimum="0" Maximum="1" Value="{Binding MicrophoneLevel, Mode=OneWay}" Height="8" Margin="0,2,0,4" />
-                                <Slider x:Name="AutoCaptureThresholdSlider"
-                                        Minimum="0"
-                                        Maximum="1"
-                                        TickFrequency="0.01"
-                                        Value="{Binding Settings.AutoCaptureThreshold, UpdateSourceTrigger=PropertyChanged}" />
-                                <TextBlock Text="Silence Before Stop (ms)" Style="{StaticResource FieldLabel}" />
-                                <TextBox Text="{Binding Settings.AutoCaptureSilenceMs, UpdateSourceTrigger=PropertyChanged}" />
-                                <CheckBox Content="AutoCapture Listening Enabled" IsChecked="{Binding Settings.AutoCaptureListeningEnabled}" />
+                                <Border Style="{StaticResource Card}" Margin="0,0,0,7">
+                                    <StackPanel>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="Capture &amp; Shortcuts" Foreground="{DynamicResource InkBrush}" FontWeight="SemiBold" />
+                                            <Border Style="{StaticResource HeaderHelpIcon}" ToolTip="Choose how dictation starts, calibrate AutoCapture sensitivity, and record global shortcuts.">
+                                                <TextBlock Style="{StaticResource HeaderHelpText}" />
+                                            </Border>
+                                        </StackPanel>
+                                        <TextBlock Text="Mode" Style="{StaticResource FieldLabel}" />
+                                        <ComboBox SelectedValue="{Binding Settings.ActivationMode}" SelectedValuePath="Tag">
+                                            <ComboBoxItem Content="Toggle" Tag="{x:Static models:ActivationMode.Toggle}" />
+                                            <ComboBoxItem Content="Hold to Talk" Tag="{x:Static models:ActivationMode.HoldToTalk}" />
+                                            <ComboBoxItem Content="AutoCapture" Tag="{x:Static models:ActivationMode.AutoCapture}" />
+                                        </ComboBox>
+                                        <TextBlock Text="AutoCapture Calibration" Style="{StaticResource FieldLabel}" />
+                                        <Grid Margin="0,0,0,2">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="{Binding MicrophoneLevelText}" Style="{StaticResource BodyText}" />
+                                            <TextBlock Grid.Column="1"
+                                                       Style="{StaticResource BodyText}"
+                                                       Text="{Binding Value, ElementName=AutoCaptureThresholdSlider, StringFormat=Trigger {0:P0}}" />
+                                        </Grid>
+                                        <ProgressBar Minimum="0" Maximum="1" Value="{Binding MicrophoneLevel, Mode=OneWay}" Height="8" Margin="0,2,0,4" />
+                                        <Slider x:Name="AutoCaptureThresholdSlider"
+                                                Minimum="0"
+                                                Maximum="1"
+                                                TickFrequency="0.01"
+                                                Value="{Binding Settings.AutoCaptureThreshold, UpdateSourceTrigger=PropertyChanged}" />
+                                        <TextBlock Text="Silence Before Stop (ms)" Style="{StaticResource FieldLabel}" />
+                                        <TextBox Text="{Binding Settings.AutoCaptureSilenceMs, UpdateSourceTrigger=PropertyChanged}" />
+                                        <CheckBox Content="AutoCapture Listening Enabled" IsChecked="{Binding Settings.AutoCaptureListeningEnabled}" />
+                                        <TextBlock Text="Current Shortcut" Style="{StaticResource FieldLabel}" />
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBox x:Name="HotkeyRecorderBox"
+                                                     Text="{Binding HotkeyText, Mode=OneWay}"
+                                                     IsReadOnly="True"
+                                                     GotKeyboardFocus="HotkeyRecorderBox_OnGotKeyboardFocus" />
+                                            <Button Grid.Column="1"
+                                                    Style="{StaticResource PrimaryButton}"
+                                                    Click="SaveHotkeyButton_OnClick"
+                                                    Margin="7,2,0,5"
+                                                    Content="Save Hotkey" />
+                                        </Grid>
+                                        <TextBlock Text="AutoCapture Listening Shortcut" Style="{StaticResource FieldLabel}" />
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBox x:Name="AutoCaptureHotkeyRecorderBox"
+                                                     Text="{Binding AutoCaptureHotkeyText, Mode=OneWay}"
+                                                     IsReadOnly="True"
+                                                     GotKeyboardFocus="AutoCaptureHotkeyRecorderBox_OnGotKeyboardFocus" />
+                                            <Button Grid.Column="1"
+                                                    Style="{StaticResource PrimaryButton}"
+                                                    Click="SaveAutoCaptureHotkeyButton_OnClick"
+                                                    Margin="7,2,0,5"
+                                                    Content="Save Hotkey" />
+                                        </Grid>
+                                        <TextBlock Text="Click a shortcut field, press your shortcut, then save it. F13-F24 macro keys can be used without modifiers." Style="{StaticResource BodyText}" />
+                                    </StackPanel>
+                                </Border>
 
                                 <Border Style="{StaticResource Card}" Margin="0,8,0,7">
                                     <StackPanel>
-                                        <TextBlock Text="Wake Voice" Foreground="{DynamicResource InkBrush}" FontWeight="SemiBold" />
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="Wake Voice" Foreground="{DynamicResource InkBrush}" FontWeight="SemiBold" />
+                                            <Border Style="{StaticResource HeaderHelpIcon}" ToolTip="Optional local voice gate for AutoCapture. When enabled, Wyspa waits for your trained wake match before listening.">
+                                                <TextBlock Style="{StaticResource HeaderHelpText}" />
+                                            </Border>
+                                        </StackPanel>
                                         <CheckBox Content="Require Local Hey Whisper Match" IsChecked="{Binding Settings.AutoCaptureWakeVoiceEnabled}" />
                                         <StackPanel IsEnabled="{Binding IsWakeVoiceSettingsEnabled}">
                                             <Grid Margin="0,0,0,2">
@@ -224,39 +314,6 @@
                                     </StackPanel>
                                 </Border>
 
-                                <TextBlock Text="Current Shortcut" Style="{StaticResource FieldLabel}" />
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBox x:Name="HotkeyRecorderBox"
-                                             Text="{Binding HotkeyText, Mode=OneWay}"
-                                             IsReadOnly="True"
-                                             GotKeyboardFocus="HotkeyRecorderBox_OnGotKeyboardFocus" />
-                                    <Button Grid.Column="1"
-                                            Style="{StaticResource PrimaryButton}"
-                                            Click="SaveHotkeyButton_OnClick"
-                                            Margin="7,2,0,5"
-                                            Content="Save Hotkey" />
-                                </Grid>
-                                <TextBlock Text="AutoCapture Listening Shortcut" Style="{StaticResource FieldLabel}" />
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBox x:Name="AutoCaptureHotkeyRecorderBox"
-                                             Text="{Binding AutoCaptureHotkeyText, Mode=OneWay}"
-                                             IsReadOnly="True"
-                                             GotKeyboardFocus="AutoCaptureHotkeyRecorderBox_OnGotKeyboardFocus" />
-                                    <Button Grid.Column="1"
-                                            Style="{StaticResource PrimaryButton}"
-                                            Click="SaveAutoCaptureHotkeyButton_OnClick"
-                                            Margin="7,2,0,5"
-                                            Content="Save Hotkey" />
-                                </Grid>
-                                <TextBlock Text="Click a shortcut field, press your shortcut, then save it. F13-F24 macro keys can be used without modifiers." Style="{StaticResource BodyText}" />
                             </StackPanel>
                         </ScrollViewer>
                     </TabItem>
@@ -270,11 +327,21 @@
                         </TabItem.Header>
                         <ScrollViewer Padding="8">
                             <StackPanel MaxWidth="560" HorizontalAlignment="Left">
-                                <TextBlock Text="Dictation Behavior" Style="{StaticResource SectionTitle}" />
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                    <TextBlock Text="Dictation Behavior" Style="{StaticResource SectionTitle}" Margin="0" />
+                                    <Border Style="{StaticResource HeaderHelpIcon}" ToolTip="Controls how transcript text is cleaned, re-written, inserted, interpreted as actions, and displayed in the overlay.">
+                                        <TextBlock Style="{StaticResource HeaderHelpText}" />
+                                    </Border>
+                                </StackPanel>
 
                                 <Border Style="{StaticResource Card}" Margin="0,0,0,7">
                                     <StackPanel>
-                                        <TextBlock Text="Basic Cleanup" Foreground="{DynamicResource InkBrush}" FontWeight="SemiBold" />
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="Basic Cleanup" Foreground="{DynamicResource InkBrush}" FontWeight="SemiBold" />
+                                            <Border Style="{StaticResource HeaderHelpIcon}" ToolTip="Local formatting before any optional AI re-write, including whitespace cleanup and spoken punctuation conversion.">
+                                                <TextBlock Style="{StaticResource HeaderHelpText}" />
+                                            </Border>
+                                        </StackPanel>
                                         <CheckBox Content="Clean Up Transcripts" IsChecked="{Binding Settings.CleanupEnabled}" />
                                         <CheckBox Content="Convert Spoken Punctuation" IsChecked="{Binding Settings.SpokenPunctuationEnabled}" />
                                     </StackPanel>
@@ -282,7 +349,12 @@
 
                                 <Border Style="{StaticResource Card}" Margin="0,0,0,7">
                                     <StackPanel>
-                                        <TextBlock Text="Tone Re-write" Foreground="{DynamicResource InkBrush}" FontWeight="SemiBold" />
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="Tone Re-write" Foreground="{DynamicResource InkBrush}" FontWeight="SemiBold" />
+                                            <Border Style="{StaticResource HeaderHelpIcon}" ToolTip="Optional Groq text pass that rewrites dictated speech into Formal, Casual, or Technical written text.">
+                                                <TextBlock Style="{StaticResource HeaderHelpText}" />
+                                            </Border>
+                                        </StackPanel>
                                         <CheckBox Content="Re-write Dictated Text with Groq" IsChecked="{Binding Settings.GroqWritingCleanupEnabled}" />
                                         <StackPanel IsEnabled="{Binding IsWritingCleanupSettingsEnabled}">
                                             <TextBlock Text="Tone" Style="{StaticResource FieldLabel}" />
@@ -293,7 +365,15 @@
                                             </ComboBox>
                                             <TextBlock Text="Tone Re-write Model" Style="{StaticResource FieldLabel}" />
                                             <TextBox Text="{Binding Settings.WritingCleanupModelId, UpdateSourceTrigger=PropertyChanged}" />
-                                            <Expander Header="Tone Re-write Prompts" Margin="0,3,0,0">
+                                            <Expander Margin="0,3,0,0">
+                                                <Expander.Header>
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Text="Tone Re-write Prompts" />
+                                                        <Border Style="{StaticResource HeaderHelpIcon}" ToolTip="Edit the system prompt sent to Groq for each tone. Leave a prompt blank to restore the default.">
+                                                            <TextBlock Style="{StaticResource HeaderHelpText}" />
+                                                        </Border>
+                                                    </StackPanel>
+                                                </Expander.Header>
                                                 <StackPanel Margin="0,6,0,0">
                                                     <TextBlock Text="Formal Prompt" Style="{StaticResource FieldLabel}" />
                                                     <TextBox Text="{Binding Settings.FormalRewritePrompt, UpdateSourceTrigger=LostFocus}"
@@ -318,7 +398,12 @@
 
                                 <Border Style="{StaticResource Card}" Margin="0,0,0,7">
                                     <StackPanel>
-                                        <TextBlock Text="Text Insertion" Foreground="{DynamicResource InkBrush}" FontWeight="SemiBold" />
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="Text Insertion" Foreground="{DynamicResource InkBrush}" FontWeight="SemiBold" />
+                                            <Border Style="{StaticResource HeaderHelpIcon}" ToolTip="Controls how Wyspa places final text into the active app and whether it remains available on the clipboard.">
+                                                <TextBlock Style="{StaticResource HeaderHelpText}" />
+                                            </Border>
+                                        </StackPanel>
                                         <TextBlock Text="Insertion Mode" Style="{StaticResource FieldLabel}" />
                                         <ComboBox SelectedValue="{Binding Settings.InsertionMode}" SelectedValuePath="Tag">
                                             <ComboBoxItem Content="Paste with Clipboard Restore" Tag="{x:Static models:InsertionMode.Paste}" />
@@ -330,7 +415,12 @@
 
                                 <Border Style="{StaticResource Card}" Margin="0,0,0,7">
                                     <StackPanel>
-                                        <TextBlock Text="Spoken Actions" Foreground="{DynamicResource InkBrush}" FontWeight="SemiBold" />
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="Spoken Actions" Foreground="{DynamicResource InkBrush}" FontWeight="SemiBold" />
+                                            <Border Style="{StaticResource HeaderHelpIcon}" ToolTip="Lets Wyspa interpret clear spoken commands such as copy, paste, Enter, or Task View instead of inserting them as text.">
+                                                <TextBlock Style="{StaticResource HeaderHelpText}" />
+                                            </Border>
+                                        </StackPanel>
                                         <CheckBox Content="Enable Spoken Commands and Groq Intent Actions" IsChecked="{Binding Settings.IntentActionsEnabled}" />
                                         <StackPanel IsEnabled="{Binding IsIntentSettingsEnabled}">
                                             <TextBlock Text="Intent Model" Style="{StaticResource FieldLabel}" />
@@ -348,7 +438,12 @@
 
                                 <Border Style="{StaticResource Card}">
                                     <StackPanel>
-                                        <TextBlock Text="Overlay" Foreground="{DynamicResource InkBrush}" FontWeight="SemiBold" />
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="Overlay" Foreground="{DynamicResource InkBrush}" FontWeight="SemiBold" />
+                                            <Border Style="{StaticResource HeaderHelpIcon}" ToolTip="Controls the small recording/status overlay and how visible its background box is.">
+                                                <TextBlock Style="{StaticResource HeaderHelpText}" />
+                                            </Border>
+                                        </StackPanel>
                                         <TextBlock Text="Overlay Background Opacity" Style="{StaticResource FieldLabel}" />
                                         <TextBlock Style="{StaticResource BodyText}"
                                                    Text="{Binding Value, ElementName=OverlayOpacitySlider, StringFormat=Background {0:P0}}" />
@@ -374,14 +469,23 @@
                         </TabItem.Header>
                         <ScrollViewer Padding="8">
                             <StackPanel MaxWidth="520" HorizontalAlignment="Left">
-                                <TextBlock Text="Privacy" Style="{StaticResource SectionTitle}" />
-                                <TextBlock Text="Wyspa sends microphone audio, model ID, and optional language/prompt to Groq. It does not take screenshots, capture active-window context, log transcripts, or keep raw audio by default." Style="{StaticResource BodyText}" Margin="0,0,0,5" />
-                                <CheckBox Content="Keep Local Transcript History" IsChecked="{Binding Settings.HistoryEnabled}" />
-                                <CheckBox Content="Retain Raw Audio for Debugging" IsChecked="{Binding Settings.RetainAudioForDebugging}" />
-                                <WrapPanel Margin="0,4,0,0">
-                                    <Button Command="{Binding ClearHistoryCommand}" Content="Clear History" />
-                                    <Button Command="{Binding RemoveKeyCommand}" Content="Remove API Key" />
-                                </WrapPanel>
+                                <Border Style="{StaticResource Card}">
+                                    <StackPanel>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="Privacy" Foreground="{DynamicResource InkBrush}" FontWeight="SemiBold" />
+                                            <Border Style="{StaticResource HeaderHelpIcon}" ToolTip="Controls local retention options and lets you clear stored data or remove the saved Groq API Key.">
+                                                <TextBlock Style="{StaticResource HeaderHelpText}" />
+                                            </Border>
+                                        </StackPanel>
+                                        <TextBlock Text="Wyspa sends microphone audio, model ID, and optional language/prompt to Groq. It does not take screenshots, capture active-window context, log transcripts, or keep raw audio by default." Style="{StaticResource BodyText}" Margin="0,2,0,5" />
+                                        <CheckBox Content="Keep Local Transcript History" IsChecked="{Binding Settings.HistoryEnabled}" />
+                                        <CheckBox Content="Retain Raw Audio for Debugging" IsChecked="{Binding Settings.RetainAudioForDebugging}" />
+                                        <WrapPanel Margin="0,4,0,0">
+                                            <Button Command="{Binding ClearHistoryCommand}" Content="Clear History" />
+                                            <Button Command="{Binding RemoveKeyCommand}" Content="Remove API Key" />
+                                        </WrapPanel>
+                                    </StackPanel>
+                                </Border>
                             </StackPanel>
                         </ScrollViewer>
                     </TabItem>
@@ -395,13 +499,27 @@
                         </TabItem.Header>
                         <ScrollViewer Padding="8">
                             <StackPanel MaxWidth="520" HorizontalAlignment="Left">
-                                <TextBlock Text="Startup" Style="{StaticResource SectionTitle}" />
-                                <CheckBox Content="Start Minimized" IsChecked="{Binding Settings.StartMinimized}" />
-                                <CheckBox Content="Start with Windows" IsChecked="{Binding StartWithWindows}" />
-                                <TextBlock Text="Start with Windows uses the current Windows user startup registry entry." Style="{StaticResource BodyText}" Margin="0,3,0,5" />
+                                <Border Style="{StaticResource Card}" Margin="0,0,0,7">
+                                    <StackPanel>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="Startup" Foreground="{DynamicResource InkBrush}" FontWeight="SemiBold" />
+                                            <Border Style="{StaticResource HeaderHelpIcon}" ToolTip="Controls whether Wyspa opens minimized and whether it starts automatically with your Windows user profile.">
+                                                <TextBlock Style="{StaticResource HeaderHelpText}" />
+                                            </Border>
+                                        </StackPanel>
+                                        <CheckBox Content="Start Minimized" IsChecked="{Binding Settings.StartMinimized}" />
+                                        <CheckBox Content="Start with Windows" IsChecked="{Binding StartWithWindows}" />
+                                        <TextBlock Text="Start with Windows uses the current Windows user startup registry entry." Style="{StaticResource BodyText}" Margin="0,3,0,0" />
+                                    </StackPanel>
+                                </Border>
                                 <Border Style="{StaticResource Card}" Margin="0,8,0,0">
                                     <StackPanel>
-                                        <TextBlock Text="Updates" Foreground="{DynamicResource InkBrush}" FontWeight="SemiBold" />
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="Updates" Foreground="{DynamicResource InkBrush}" FontWeight="SemiBold" />
+                                            <Border Style="{StaticResource HeaderHelpIcon}" ToolTip="Checks the latest GitHub release and opens the newer installer when an update is available.">
+                                                <TextBlock Style="{StaticResource HeaderHelpText}" />
+                                            </Border>
+                                        </StackPanel>
                                         <TextBlock Text="{Binding AppVersionText}" Style="{StaticResource BodyText}" Margin="0,2,0,3" />
                                         <TextBlock Text="{Binding UpdateStatus}" Style="{StaticResource BodyText}" Margin="0,0,0,4" />
                                         <WrapPanel>
