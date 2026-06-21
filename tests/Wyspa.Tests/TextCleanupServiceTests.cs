@@ -28,6 +28,9 @@ public sealed class TextCleanupServiceTests
     [InlineData("")]
     [InlineData("...")]
     [InlineData("?!")]
+    [InlineData("Thank you.")]
+    [InlineData("Thanks!")]
+    [InlineData("Thank you for watching.")]
     [InlineData("Please provide the dictated speech, and I will rewrite it into polished written text.")]
     public void HasTranscribableText_RejectsEmptyNoiseAndAssistantPlaceholders(string input)
     {
@@ -38,6 +41,7 @@ public sealed class TextCleanupServiceTests
     [InlineData("hello there")]
     [InlineData("Press Enter")]
     [InlineData("yes")]
+    [InlineData("thank you for your help")]
     public void HasTranscribableText_AllowsShortRealSpeech(string input)
     {
         Assert.True(TextCleanupService.HasTranscribableText(input));

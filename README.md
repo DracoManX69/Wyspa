@@ -44,10 +44,12 @@ For development:
 For a GitHub release, download:
 
 ```text
-WyspaSetup-0.5.1-win-x64.exe
+WyspaSetup-0.5.2-win-x64.exe
 ```
 
 Run the installer and follow the wizard. The installer places Wyspa in your user profile by default, offers Start Menu and desktop shortcut options, and registers Wyspa in Windows Apps & Features.
+
+To update Wyspa, run the newer setup EXE directly over the existing install. You do not need to uninstall first; the installer keeps your settings and saved Groq key.
 
 The installer checks for the .NET 10 Desktop Runtime x64. If it is missing, setup opens the official Microsoft runtime installer or download page and asks you to run Wyspa Setup again after installing the runtime.
 
@@ -114,7 +116,7 @@ Create the Windows installer:
 This produces:
 
 ```text
-artifacts\installer\WyspaSetup-0.5.1-win-x64.exe
+artifacts\installer\WyspaSetup-0.5.2-win-x64.exe
 ```
 
 ## Release Files
@@ -122,7 +124,7 @@ artifacts\installer\WyspaSetup-0.5.1-win-x64.exe
 For a GitHub release, upload the installer:
 
 ```text
-artifacts\installer\WyspaSetup-0.5.1-win-x64.exe
+artifacts\installer\WyspaSetup-0.5.2-win-x64.exe
 ```
 
 Optional secondary asset:

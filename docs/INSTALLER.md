@@ -11,7 +11,7 @@ Wyspa and this installer documentation were written and produced with AI assista
 The installer build creates:
 
 ```text
-artifacts\installer\WyspaSetup-0.5.1-win-x64.exe
+artifacts\installer\WyspaSetup-0.5.2-win-x64.exe
 ```
 
 This setup executable contains the Wyspa app files. It does not bundle the Microsoft .NET runtime.
@@ -56,6 +56,7 @@ The script first runs the Wyspa publish step, then invokes Inno Setup.
 The installer:
 
 - installs Wyspa under the current user's profile by default;
+- upgrades an existing Wyspa install when a newer setup EXE is run over the top;
 - lets the user choose the install location;
 - offers Start Menu shortcut creation;
 - offers optional desktop shortcut creation;
@@ -68,6 +69,12 @@ The default install path is:
 ```text
 %LocalAppData%\Programs\Wyspa
 ```
+
+## Update Behavior
+
+Wyspa uses a stable installer application ID and install directory. To update, run the newer `WyspaSetup-*-win-x64.exe` directly. You do not need to uninstall first.
+
+During an update, setup asks the running tray app to quit, replaces the installed program files, keeps `%AppData%\Wyspa`, and leaves the saved settings and encrypted Groq API key in place.
 
 ## .NET Runtime Dependency
 
@@ -136,7 +143,7 @@ Before publishing a GitHub release:
 
 - Run `.\scripts\test.ps1`.
 - Run `.\scripts\installer.ps1`.
-- Confirm `artifacts\installer\WyspaSetup-0.5.1-win-x64.exe` exists.
+- Confirm `artifacts\installer\WyspaSetup-0.5.2-win-x64.exe` exists.
 - Confirm the installer opens normally on Windows.
 - Install Wyspa, launch it, then uninstall it while the tray app is running.
 - Confirm uninstall closes Wyspa and removes installed files.

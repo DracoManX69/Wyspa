@@ -12,6 +12,12 @@ public sealed class TextCleanupService
         "i will rewrite it",
         "i'll rewrite it"
     ];
+    private static readonly string[] ExactNonDictationResponses =
+    [
+        "thank you",
+        "thanks",
+        "thank you for watching"
+    ];
 
     public string Clean(string input, bool spokenPunctuationEnabled = true)
     {
@@ -48,7 +54,20 @@ public sealed class TextCleanupService
             return false;
         }
 
+        var normalizedText = NormalizeForNonDictationMatch(text);
+        if (ExactNonDictationResponses.Contains(normalizedText, StringComparer.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
         return !NonDictationResponses.Any(response => text.StartsWith(response, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string NormalizeForNonDictationMatch(string text)
+    {
+        var normalized = Regex.Replace(text, @"[^\p{L}\p{Nd}\s]", " ");
+        normalized = Regex.Replace(normalized, @"\s+", " ");
+        return normalized.Trim();
     }
 
     private static string ConvertSpokenPunctuation(string text)
