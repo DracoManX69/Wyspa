@@ -103,6 +103,22 @@ public sealed class GroqTranscriptionClientTests
     }
 
     [Fact]
+    public async Task CreateCleanupRequest_UsesCustomPromptWhenProvided()
+    {
+        using var request = GroqTranscriptionClient.CreateCleanupRequest(
+            "gsk_test",
+            "clean this",
+            "llama-3.1-8b-instant",
+            WritingCleanupTone.Casual,
+            "Custom prompt text.");
+
+        var body = await request.Content!.ReadAsStringAsync();
+
+        Assert.Contains("Custom prompt text.", body);
+        Assert.DoesNotContain("friendly natural voice", body);
+    }
+
+    [Fact]
     public void ParseIntentResponse_ReturnsWhitelistedAction()
     {
         var response = """

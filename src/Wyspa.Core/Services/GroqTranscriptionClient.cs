@@ -100,14 +100,14 @@ public sealed class GroqTranscriptionClient : IGroqTranscriptionClient
         return ParseIntentResponse(responseJson, transcript);
     }
 
-    public async Task<string> CleanupTranscriptAsync(string apiKey, string transcript, string modelId, WritingCleanupTone tone, CancellationToken cancellationToken)
+    public async Task<string> CleanupTranscriptAsync(string apiKey, string transcript, string modelId, WritingCleanupTone tone, string? prompt, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(transcript))
         {
             return string.Empty;
         }
 
-        using var request = CreateCleanupRequest(apiKey, transcript, string.IsNullOrWhiteSpace(modelId) ? DefaultCleanupModel : modelId, tone);
+        using var request = CreateCleanupRequest(apiKey, transcript, string.IsNullOrWhiteSpace(modelId) ? DefaultCleanupModel : modelId, tone, prompt);
         using var response = await SendWithRetryAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
@@ -182,7 +182,7 @@ For insert, put the final text to type in "text" and action must be null.
         return request;
     }
 
-    public static HttpRequestMessage CreateCleanupRequest(string apiKey, string transcript, string modelId, WritingCleanupTone tone)
+    public static HttpRequestMessage CreateCleanupRequest(string apiKey, string transcript, string modelId, WritingCleanupTone tone, string? prompt = null)
     {
         var request = new HttpRequestMessage(HttpMethod.Post, "chat/completions");
         AddAuth(request, apiKey);
@@ -197,7 +197,7 @@ For insert, put the final text to type in "text" and action must be null.
                 new
                 {
                     role = "system",
-                    content = BuildCleanupSystemPrompt(tone)
+                    content = string.IsNullOrWhiteSpace(prompt) ? WritingCleanupPromptDefaults.ForTone(tone) : prompt
                 },
                 new { role = "user", content = transcript }
             }
@@ -322,34 +322,6 @@ For insert, put the final text to type in "text" and action must be null.
         var roughInputTokens = Math.Max(80, transcript.Length / 4);
         return Math.Clamp(roughInputTokens + 180, 260, 1400);
     }
-
-    private static string BuildCleanupSystemPrompt(WritingCleanupTone tone) => tone switch
-    {
-        WritingCleanupTone.Formal => """
-You rewrite dictated speech into polished written text.
-Use a formal, professional tone with complete sentences and clear paragraphing.
-Remove filler words, false starts, repeated phrasing, and conversational clutter.
-Preserve the speaker's meaning, names, facts, and intent.
-Do not add new information.
-Return only the rewritten text.
-""",
-        WritingCleanupTone.Technical => """
-You rewrite dictated speech into clear technical writing.
-Keep technical terms, product names, numbers, commands, acronyms, and code-like wording accurate.
-Structure the result with concise paragraphs or bullets when that makes procedures or explanations easier to scan.
-Remove filler words, false starts, repeated phrasing, and conversational clutter.
-Preserve the speaker's meaning and do not add new information.
-Return only the rewritten text.
-""",
-        _ => """
-You rewrite dictated speech into a clean casual written message.
-Keep the speaker's friendly natural voice while removing filler words, false starts, repetition, and rambling.
-Use readable punctuation and short paragraphs when helpful.
-Preserve the speaker's meaning, names, facts, and intent.
-Do not make it overly formal and do not add new information.
-Return only the rewritten text.
-"""
-    };
 
     private static bool TryParseAction(JsonElement root, out VoxAction action)
     {

@@ -198,6 +198,7 @@ public sealed class DictationOrchestrator
                     cleaned,
                     settings.WritingCleanupModelId,
                     settings.WritingCleanupTone,
+                    settings.GetWritingCleanupPrompt(),
                     cancellationToken);
             }
 

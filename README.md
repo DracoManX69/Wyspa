@@ -14,8 +14,9 @@ Wyspa was written effectively entirely by Codex with some cleaver interfacing wi
 - Toggle, hold-to-talk, and AutoCapture trigger modes.
 - Configurable global hotkey, including macro keys such as `F13`-`F24`.
 - Groq Whisper transcription using `whisper-large-v3-turbo`.
-- Optional Groq writing cleanup with Formal, Casual, and Technical tones.
+- Optional Groq writing cleanup with Formal, Casual, and Technical tones plus editable re-write prompts.
 - Optional Groq intent model for commands such as copy, paste, Enter, Escape, task view, and related actions.
+- In-app GitHub update check with a direct update download button when a newer installer is available.
 - Paste or type insertion modes.
 - Scratchpad for testing transcription inside the app.
 - Live recording overlay with voice waveform and adjustable transparency.
@@ -44,7 +45,7 @@ For development:
 For a GitHub release, download:
 
 ```text
-WyspaSetup-0.5.2-win-x64.exe
+WyspaSetup-0.5.3-win-x64.exe
 ```
 
 Run the installer and follow the wizard. The installer places Wyspa in your user profile by default, offers Start Menu and desktop shortcut options, and registers Wyspa in Windows Apps & Features.
@@ -116,7 +117,7 @@ Create the Windows installer:
 This produces:
 
 ```text
-artifacts\installer\WyspaSetup-0.5.2-win-x64.exe
+artifacts\installer\WyspaSetup-0.5.3-win-x64.exe
 ```
 
 ## Release Files
@@ -124,7 +125,7 @@ artifacts\installer\WyspaSetup-0.5.2-win-x64.exe
 For a GitHub release, upload the installer:
 
 ```text
-artifacts\installer\WyspaSetup-0.5.2-win-x64.exe
+artifacts\installer\WyspaSetup-0.5.3-win-x64.exe
 ```
 
 Optional secondary asset:
@@ -138,6 +139,8 @@ Do not publish local secrets such as `key.txt`, build folders such as `bin/` and
 ## Privacy
 
 Wyspa sends microphone audio for each dictation to Groq, along with the selected model ID and optional language/prompt settings. If Groq writing cleanup is enabled, the transcript is also sent to Groq's chat completions endpoint to rewrite it in the selected tone. If command intent is enabled, the transcript is also sent to Groq's chat completions endpoint so the app can decide whether you meant to insert text or perform an action.
+
+When you use Check for Updates, Wyspa calls the public GitHub latest-release endpoint for this repository and compares the latest release version with the installed app version.
 
 Wyspa does not take screenshots, capture active-window contents, record keystroke history, or intentionally log transcripts. See [docs/PRIVACY.md](docs/PRIVACY.md) for details.
 

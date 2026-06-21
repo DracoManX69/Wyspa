@@ -97,6 +97,7 @@ public partial class App : System.Windows.Application
             var settingsService = new JsonSettingsService();
             var secretStore = new DpapiSecretStore();
             var groqClient = new GroqTranscriptionClient(_httpClient);
+            var updateService = new GitHubUpdateService(_httpClient);
             var textCleanup = new TextCleanupService();
             var insertionService = new WindowsTextInsertionService();
             var keyboardCommandService = new WindowsKeyboardCommandService();
@@ -115,7 +116,7 @@ public partial class App : System.Windows.Application
                 keyboardCommandService,
                 overlayService);
 
-            _viewModel = new MainViewModel(settingsService, secretStore, groqClient, _audioCapture, _levelMonitor, _hotkeyService, _autoCaptureHotkeyService, startupService, orchestrator);
+            _viewModel = new MainViewModel(settingsService, secretStore, groqClient, _audioCapture, _levelMonitor, _hotkeyService, _autoCaptureHotkeyService, startupService, orchestrator, updateService);
             _autoCaptureService = new AutoCaptureService(settingsService, secretStore, _levelMonitor, _audioCapture, orchestrator, overlayService, wakeToneService);
             _trayService = new TrayService(_viewModel, startupService, ShowMainWindow, QuitAsync);
             overlayService.NotificationRequested += (_, message) => _trayService?.ShowNotification(message);

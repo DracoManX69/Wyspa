@@ -35,7 +35,9 @@ For Groq writing cleanup, if enabled, Wyspa sends:
 - the transcript text after basic local cleanup;
 - the selected writing cleanup model ID, normally `llama-3.1-8b-instant`;
 - the selected tone, Formal, Casual, or Technical;
-- an instruction asking the model to preserve meaning while removing filler words, false starts, and repetition.
+- the selected tone re-write prompt, which can be edited in settings.
+
+For update checks, if you click Check for Updates, Wyspa sends a standard HTTPS request to GitHub's public latest-release API for this repository. The request includes a Wyspa user-agent with the installed version so GitHub can return the latest release metadata.
 
 ## Data Not Intentionally Sent
 
@@ -66,6 +68,7 @@ Examples include:
 - hotkey;
 - trigger mode;
 - model IDs;
+- tone re-write prompts;
 - overlay opacity;
 - insertion mode;
 - start minimized/start with Windows settings;

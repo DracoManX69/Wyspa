@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Input;
 using Wyspa.App.Services;
@@ -31,6 +32,7 @@ public sealed class MainViewModel : ViewModelBase
     private readonly IHotkeyService _autoCaptureHotkeyService;
     private readonly IStartupService _startupService;
     private readonly DictationOrchestrator _orchestrator;
+    private readonly GitHubUpdateService _updateService;
     private string _apiKey = string.Empty;
     private string _connectionMessage = "Add a Groq API key to enable transcription.";
     private string _hotkeyText = HotkeySettings.Default.DisplayText;
@@ -46,6 +48,10 @@ public sealed class MainViewModel : ViewModelBase
     private bool _isScratchpadRecording;
     private bool _isWakeVoiceRecording;
     private bool _startWithWindows;
+    private bool _isCheckingForUpdates;
+    private bool _isUpdateAvailable;
+    private string _updateStatus = "Updates have not been checked.";
+    private string? _updateUrl;
     private float _microphoneLevel;
     private DictationState _status = DictationState.Idle;
 
@@ -58,7 +64,8 @@ public sealed class MainViewModel : ViewModelBase
         IHotkeyService hotkeyService,
         IHotkeyService autoCaptureHotkeyService,
         IStartupService startupService,
-        DictationOrchestrator orchestrator)
+        DictationOrchestrator orchestrator,
+        GitHubUpdateService updateService)
     {
         _settingsService = settingsService;
         _secretStore = secretStore;
@@ -69,6 +76,7 @@ public sealed class MainViewModel : ViewModelBase
         _autoCaptureHotkeyService = autoCaptureHotkeyService;
         _startupService = startupService;
         _orchestrator = orchestrator;
+        _updateService = updateService;
         Settings = new AppSettings();
         Devices = [];
         SaveCommand = new AsyncRelayCommand(SaveHotkeyAsync);
@@ -80,6 +88,8 @@ public sealed class MainViewModel : ViewModelBase
         ScratchpadCommand = new AsyncRelayCommand(ToggleScratchpadAsync);
         RecordWakeVoiceCommand = new AsyncRelayCommand(ToggleWakeVoiceRecordingAsync);
         ResetWakeVoiceCommand = new AsyncRelayCommand(ResetWakeVoiceTrainingAsync);
+        CheckForUpdatesCommand = new AsyncRelayCommand(CheckForUpdatesAsync);
+        OpenUpdateCommand = new RelayCommand(_ => OpenUpdate(), _ => IsUpdateAvailable && !string.IsNullOrWhiteSpace(UpdateUrl));
         ClearHistoryCommand = new RelayCommand(_ => ConnectionMessage = "History is off by default. Nothing was cleared.");
         _orchestrator.StateChanged += (_, state) => RunOnUi(() => Status = state);
         _audioCapture.LevelAvailable += (_, level) => UpdateMicrophoneLevel(level);
@@ -101,6 +111,8 @@ public sealed class MainViewModel : ViewModelBase
     public ICommand ScratchpadCommand { get; }
     public ICommand RecordWakeVoiceCommand { get; }
     public ICommand ResetWakeVoiceCommand { get; }
+    public ICommand CheckForUpdatesCommand { get; }
+    public ICommand OpenUpdateCommand { get; }
     public ICommand RemoveKeyCommand { get; }
     public ICommand RefreshDevicesCommand { get; }
     public ICommand ClearHistoryCommand { get; }
@@ -197,6 +209,42 @@ public sealed class MainViewModel : ViewModelBase
         }
     }
 
+    public bool IsCheckingForUpdates
+    {
+        get => _isCheckingForUpdates;
+        private set => SetProperty(ref _isCheckingForUpdates, value);
+    }
+
+    public bool IsUpdateAvailable
+    {
+        get => _isUpdateAvailable;
+        private set
+        {
+            if (SetProperty(ref _isUpdateAvailable, value))
+            {
+                CommandManager.InvalidateRequerySuggested();
+            }
+        }
+    }
+
+    public string UpdateStatus
+    {
+        get => _updateStatus;
+        private set => SetProperty(ref _updateStatus, value);
+    }
+
+    public string? UpdateUrl
+    {
+        get => _updateUrl;
+        private set
+        {
+            if (SetProperty(ref _updateUrl, value))
+            {
+                CommandManager.InvalidateRequerySuggested();
+            }
+        }
+    }
+
     public float MicrophoneLevel
     {
         get => _microphoneLevel;
@@ -233,9 +281,13 @@ public sealed class MainViewModel : ViewModelBase
     public string WakeTrainingPromptText => WakeTrainingPrompts[_wakeTrainingPromptIndex].Text;
     public string WakeToneText => string.IsNullOrWhiteSpace(Settings.WakeTonePath) ? "Default tone" : Settings.WakeTonePath;
     public string MicrophoneLevelText => $"Live input {MicrophoneLevel:P0}";
+    public string AppVersionText => $"Current Version {GetCurrentVersionText()}";
     public bool CanListen => HasApiKey;
     public bool IsAutoCaptureMode => Settings.ActivationMode is ActivationMode.AutoCapture;
     public bool IsAutoCaptureListening => HasApiKey && IsAutoCaptureMode && Settings.AutoCaptureListeningEnabled;
+    public bool IsWakeVoiceSettingsEnabled => Settings.AutoCaptureWakeVoiceEnabled;
+    public bool IsWritingCleanupSettingsEnabled => Settings.GroqWritingCleanupEnabled;
+    public bool IsIntentSettingsEnabled => Settings.IntentActionsEnabled;
 
     public void UpdateMicrophoneLevel(float level)
     {
@@ -259,6 +311,9 @@ public sealed class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(Settings));
         OnPropertyChanged(nameof(IsAutoCaptureMode));
         OnPropertyChanged(nameof(IsAutoCaptureListening));
+        OnPropertyChanged(nameof(IsWakeVoiceSettingsEnabled));
+        OnPropertyChanged(nameof(IsWritingCleanupSettingsEnabled));
+        OnPropertyChanged(nameof(IsIntentSettingsEnabled));
     }
 
     public async Task ToggleListeningAsync()
@@ -436,6 +491,7 @@ public sealed class MainViewModel : ViewModelBase
                     cleaned,
                     settings.WritingCleanupModelId,
                     settings.WritingCleanupTone,
+                    settings.GetWritingCleanupPrompt(),
                     CancellationToken.None);
             }
 
@@ -689,6 +745,10 @@ public sealed class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(WakeTrainingText));
         OnPropertyChanged(nameof(WakeTrainingProgressText));
         OnPropertyChanged(nameof(WakeTrainingPromptText));
+        OnPropertyChanged(nameof(IsWakeVoiceSettingsEnabled));
+        OnPropertyChanged(nameof(IsWritingCleanupSettingsEnabled));
+        OnPropertyChanged(nameof(IsIntentSettingsEnabled));
+        OnPropertyChanged(nameof(Settings));
         SettingsChanged?.Invoke(this, EventArgs.Empty);
         AutoCaptureListeningChanged?.Invoke(this, EventArgs.Empty);
     }
@@ -718,6 +778,10 @@ public sealed class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(WakeTrainingText));
         OnPropertyChanged(nameof(WakeTrainingProgressText));
         OnPropertyChanged(nameof(WakeTrainingPromptText));
+        OnPropertyChanged(nameof(IsWakeVoiceSettingsEnabled));
+        OnPropertyChanged(nameof(IsWritingCleanupSettingsEnabled));
+        OnPropertyChanged(nameof(IsIntentSettingsEnabled));
+        OnPropertyChanged(nameof(Settings));
         SettingsChanged?.Invoke(this, EventArgs.Empty);
         SettingsSaved?.Invoke(this, EventArgs.Empty);
         AutoCaptureListeningChanged?.Invoke(this, EventArgs.Empty);
@@ -735,6 +799,50 @@ public sealed class MainViewModel : ViewModelBase
         {
             Settings.WritingCleanupModelId = GroqTranscriptionClient.DefaultCleanupModel;
         }
+        if (string.IsNullOrWhiteSpace(Settings.FormalRewritePrompt))
+        {
+            Settings.FormalRewritePrompt = WritingCleanupPromptDefaults.Formal;
+        }
+        if (string.IsNullOrWhiteSpace(Settings.CasualRewritePrompt))
+        {
+            Settings.CasualRewritePrompt = WritingCleanupPromptDefaults.Casual;
+        }
+        if (string.IsNullOrWhiteSpace(Settings.TechnicalRewritePrompt))
+        {
+            Settings.TechnicalRewritePrompt = WritingCleanupPromptDefaults.Technical;
+        }
+    }
+
+    private async Task CheckForUpdatesAsync()
+    {
+        IsCheckingForUpdates = true;
+        IsUpdateAvailable = false;
+        UpdateUrl = null;
+        UpdateStatus = "Checking GitHub for updates...";
+        try
+        {
+            var result = await _updateService.CheckLatestAsync(GetCurrentVersion(), CancellationToken.None);
+            UpdateStatus = result.UserMessage;
+            IsUpdateAvailable = result.UpdateAvailable;
+            UpdateUrl = result.InstallerUrl ?? result.ReleaseUrl;
+        }
+        finally
+        {
+            IsCheckingForUpdates = false;
+        }
+    }
+
+    private void OpenUpdate()
+    {
+        if (string.IsNullOrWhiteSpace(UpdateUrl))
+        {
+            return;
+        }
+
+        Process.Start(new ProcessStartInfo(UpdateUrl)
+        {
+            UseShellExecute = true
+        });
     }
 
     private async Task TestConnectionAsync()
@@ -847,5 +955,17 @@ public sealed class MainViewModel : ViewModelBase
         }
 
         return hasKey;
+    }
+
+    private static Version GetCurrentVersion()
+    {
+        var version = typeof(MainViewModel).Assembly.GetName().Version;
+        return version is null ? new Version(0, 0, 0) : new Version(version.Major, Math.Max(version.Minor, 0), Math.Max(version.Build, 0));
+    }
+
+    private static string GetCurrentVersionText()
+    {
+        var version = GetCurrentVersion();
+        return $"{version.Major}.{version.Minor}.{version.Build}";
     }
 }

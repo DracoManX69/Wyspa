@@ -19,6 +19,9 @@ public sealed class AppSettings
     public bool GroqWritingCleanupEnabled { get; set; }
     public string WritingCleanupModelId { get; set; } = "llama-3.1-8b-instant";
     public WritingCleanupTone WritingCleanupTone { get; set; } = WritingCleanupTone.Casual;
+    public string FormalRewritePrompt { get; set; } = WritingCleanupPromptDefaults.Formal;
+    public string CasualRewritePrompt { get; set; } = WritingCleanupPromptDefaults.Casual;
+    public string TechnicalRewritePrompt { get; set; } = WritingCleanupPromptDefaults.Technical;
     public bool IntentActionsEnabled { get; set; } = true;
     public string IntentModelId { get; set; } = "llama-3.3-70b-versatile";
     public double IntentConfidenceThreshold { get; set; } = 0.62;
@@ -34,4 +37,11 @@ public sealed class AppSettings
     public WakeVoiceProfile? AutoCaptureWakeVoiceProfile { get; set; }
     public bool WakeToneEnabled { get; set; } = true;
     public string? WakeTonePath { get; set; }
+
+    public string GetWritingCleanupPrompt() => WritingCleanupTone switch
+    {
+        WritingCleanupTone.Formal => string.IsNullOrWhiteSpace(FormalRewritePrompt) ? WritingCleanupPromptDefaults.Formal : FormalRewritePrompt,
+        WritingCleanupTone.Technical => string.IsNullOrWhiteSpace(TechnicalRewritePrompt) ? WritingCleanupPromptDefaults.Technical : TechnicalRewritePrompt,
+        _ => string.IsNullOrWhiteSpace(CasualRewritePrompt) ? WritingCleanupPromptDefaults.Casual : CasualRewritePrompt
+    };
 }

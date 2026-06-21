@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using Microsoft.Win32;
 using System.Windows;
@@ -11,8 +12,12 @@ namespace Wyspa.App;
 
 public partial class MainWindow : Window
 {
+    private const string SavedApiKeyPlaceholder = "SavedApiKey";
+    private const string SavedApiKeyDisplayText = "saved-api-key";
     private readonly DispatcherTimer _autoSaveTimer;
     private bool _isReadyForAutoSave;
+    private bool _isUpdatingApiKeyBox;
+    private MainViewModel? _observedViewModel;
     private HotkeyRecordingTarget _recordingHotkeyTarget = HotkeyRecordingTarget.None;
     private ScratchpadWindow? _scratchpadWindow;
     public bool IsDarkMode { get; set; }
@@ -22,7 +27,12 @@ public partial class MainWindow : Window
         InitializeComponent();
         _autoSaveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(120) };
         _autoSaveTimer.Tick += AutoSaveTimer_OnTick;
-        Loaded += (_, _) => _isReadyForAutoSave = true;
+        Loaded += (_, _) =>
+        {
+            _isReadyForAutoSave = true;
+            RefreshApiKeyBox();
+        };
+        DataContextChanged += MainWindow_OnDataContextChanged;
         AddHandler(System.Windows.Controls.CheckBox.CheckedEvent, new RoutedEventHandler(AutoSaveControl_OnChanged), handledEventsToo: true);
         AddHandler(System.Windows.Controls.CheckBox.UncheckedEvent, new RoutedEventHandler(AutoSaveControl_OnChanged), handledEventsToo: true);
         AddHandler(System.Windows.Controls.ComboBox.SelectionChangedEvent, new System.Windows.Controls.SelectionChangedEventHandler(AutoSaveComboBox_OnSelectionChanged), handledEventsToo: true);
@@ -95,6 +105,96 @@ public partial class MainWindow : Window
             new WakeToneService().Play(viewModel.Settings);
         }
     }
+
+    private void MainWindow_OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (_observedViewModel is not null)
+        {
+            _observedViewModel.PropertyChanged -= ViewModel_OnPropertyChanged;
+        }
+
+        _observedViewModel = e.NewValue as MainViewModel;
+        if (_observedViewModel is not null)
+        {
+            _observedViewModel.PropertyChanged += ViewModel_OnPropertyChanged;
+        }
+
+        RefreshApiKeyBox();
+    }
+
+    private void ViewModel_OnPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(MainViewModel.HasApiKey) or nameof(MainViewModel.ApiKey))
+        {
+            Dispatcher.BeginInvoke(new Action(RefreshApiKeyBox));
+        }
+    }
+
+    private void ApiKeyBox_OnPasswordChanged(object sender, RoutedEventArgs e)
+    {
+        if (_isUpdatingApiKeyBox || DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        if (IsShowingSavedApiKeyPlaceholder())
+        {
+            return;
+        }
+
+        viewModel.ApiKey = ApiKeyBox.Password;
+    }
+
+    private void ApiKeyBox_OnGotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (!IsShowingSavedApiKeyPlaceholder())
+        {
+            return;
+        }
+
+        _isUpdatingApiKeyBox = true;
+        ApiKeyBox.Tag = null;
+        ApiKeyBox.Clear();
+        _isUpdatingApiKeyBox = false;
+        if (DataContext is MainViewModel viewModel)
+        {
+            viewModel.ApiKey = string.Empty;
+        }
+    }
+
+    private void ApiKeyBox_OnLostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        RefreshApiKeyBox();
+    }
+
+    private void RefreshApiKeyBox()
+    {
+        if (DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        if (!viewModel.HasApiKey || !string.IsNullOrWhiteSpace(viewModel.ApiKey) || ApiKeyBox.IsKeyboardFocusWithin)
+        {
+            if (!viewModel.HasApiKey && IsShowingSavedApiKeyPlaceholder())
+            {
+                _isUpdatingApiKeyBox = true;
+                ApiKeyBox.Tag = null;
+                ApiKeyBox.Clear();
+                _isUpdatingApiKeyBox = false;
+            }
+
+            return;
+        }
+
+        _isUpdatingApiKeyBox = true;
+        ApiKeyBox.Tag = SavedApiKeyPlaceholder;
+        ApiKeyBox.Password = SavedApiKeyDisplayText;
+        _isUpdatingApiKeyBox = false;
+    }
+
+    private bool IsShowingSavedApiKeyPlaceholder() =>
+        string.Equals(ApiKeyBox.Tag as string, SavedApiKeyPlaceholder, StringComparison.Ordinal);
 
     private void HotkeyRecorderBox_OnGotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
     {

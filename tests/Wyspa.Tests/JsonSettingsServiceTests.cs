@@ -19,6 +19,9 @@ public sealed class JsonSettingsServiceTests
             GroqWritingCleanupEnabled = true,
             WritingCleanupModelId = "llama-3.1-8b-instant",
             WritingCleanupTone = WritingCleanupTone.Formal,
+            FormalRewritePrompt = "Formal test prompt.",
+            CasualRewritePrompt = "Casual test prompt.",
+            TechnicalRewritePrompt = "Technical test prompt.",
             WakeToneEnabled = true,
             WakeTonePath = @"C:\Sounds\wake.wav",
             Hotkey = new HotkeySettings(HotkeyModifiers.Control | HotkeyModifiers.Shift, "F8"),
@@ -48,6 +51,9 @@ public sealed class JsonSettingsServiceTests
         Assert.True(loaded.GroqWritingCleanupEnabled);
         Assert.Equal("llama-3.1-8b-instant", loaded.WritingCleanupModelId);
         Assert.Equal(WritingCleanupTone.Formal, loaded.WritingCleanupTone);
+        Assert.Equal("Formal test prompt.", loaded.FormalRewritePrompt);
+        Assert.Equal("Casual test prompt.", loaded.CasualRewritePrompt);
+        Assert.Equal("Technical test prompt.", loaded.TechnicalRewritePrompt);
         Assert.True(loaded.WakeToneEnabled);
         Assert.Equal(@"C:\Sounds\wake.wav", loaded.WakeTonePath);
         Assert.Equal("F8", loaded.Hotkey.Key);
