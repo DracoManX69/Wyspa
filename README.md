@@ -45,7 +45,7 @@ For development:
 For a GitHub release, download:
 
 ```text
-WyspaSetup-0.5.4-win-x64.exe
+WyspaSetup-0.5.5-win-x64.exe
 ```
 
 Run the installer and follow the wizard. The installer places Wyspa in your user profile by default, offers Start Menu and desktop shortcut options, and registers Wyspa in Windows Apps & Features.
@@ -117,7 +117,7 @@ Create the Windows installer:
 This produces:
 
 ```text
-artifacts\installer\WyspaSetup-0.5.4-win-x64.exe
+artifacts\installer\WyspaSetup-0.5.5-win-x64.exe
 ```
 
 ## Release Files
@@ -125,7 +125,7 @@ artifacts\installer\WyspaSetup-0.5.4-win-x64.exe
 For a GitHub release, upload the installer:
 
 ```text
-artifacts\installer\WyspaSetup-0.5.4-win-x64.exe
+artifacts\installer\WyspaSetup-0.5.5-win-x64.exe
 ```
 
 Optional secondary asset:

@@ -823,8 +823,8 @@ public sealed class MainViewModel : ViewModelBase
         {
             var result = await _updateService.CheckLatestAsync(GetCurrentVersion(), CancellationToken.None);
             UpdateStatus = result.UserMessage;
-            IsUpdateAvailable = result.UpdateAvailable;
             UpdateUrl = result.InstallerUrl ?? result.ReleaseUrl;
+            IsUpdateAvailable = result.UpdateAvailable;
         }
         finally
         {

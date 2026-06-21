@@ -1,6 +1,6 @@
 #define AppName "Wyspa"
-#define AppVersion "0.5.4"
-#define AppVersionInfo "0.5.4.0"
+#define AppVersion "0.5.5"
+#define AppVersionInfo "0.5.5.0"
 #define AppPublisher "Wyspa"
 #define AppExeName "Wyspa.exe"
 #define PublishDir "..\artifacts\publish\win-x64"
