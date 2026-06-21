@@ -253,6 +253,9 @@
             <Setter Property="Background" Value="{DynamicResource PanelBrush}" />
             <Setter Property="Foreground" Value="{DynamicResource InkBrush}" />
             <Setter Property="BorderBrush" Value="{DynamicResource LineBrush}" />
+            <Setter Property="MaxWidth" Value="360" />
+            <Setter Property="Padding" Value="8,6" />
+            <Setter Property="FontSize" Value="12" />
         </Style>
 
         <Style TargetType="CheckBox">
