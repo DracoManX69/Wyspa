@@ -184,6 +184,17 @@ public sealed class DictationOrchestrator
                 }
             }
 
+            if (settings.GroqWritingCleanupEnabled && !string.IsNullOrWhiteSpace(cleaned))
+            {
+                SetState(DictationState.Transcribing, "Polishing");
+                cleaned = await _groqClient.CleanupTranscriptAsync(
+                    apiKey,
+                    cleaned,
+                    settings.WritingCleanupModelId,
+                    settings.WritingCleanupTone,
+                    cancellationToken);
+            }
+
             var inserted = await _textInsertion.InsertAsync(
                 cleaned,
                 settings.InsertionMode,

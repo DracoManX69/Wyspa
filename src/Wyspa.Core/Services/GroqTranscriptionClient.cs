@@ -12,6 +12,7 @@ public sealed class GroqTranscriptionClient : IGroqTranscriptionClient
     public const string BaseUrl = "https://api.groq.com/openai/v1/";
     public const string DefaultModel = "whisper-large-v3-turbo";
     public const string DefaultIntentModel = "llama-3.3-70b-versatile";
+    public const string DefaultCleanupModel = "llama-3.1-8b-instant";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly HttpClient _httpClient;
 
@@ -99,6 +100,24 @@ public sealed class GroqTranscriptionClient : IGroqTranscriptionClient
         return ParseIntentResponse(responseJson, transcript);
     }
 
+    public async Task<string> CleanupTranscriptAsync(string apiKey, string transcript, string modelId, WritingCleanupTone tone, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(transcript))
+        {
+            return string.Empty;
+        }
+
+        using var request = CreateCleanupRequest(apiKey, transcript, string.IsNullOrWhiteSpace(modelId) ? DefaultCleanupModel : modelId, tone);
+        using var response = await SendWithRetryAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            return transcript.Trim();
+        }
+
+        var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
+        return ParseTextResponse(responseJson, transcript);
+    }
+
     public static HttpRequestMessage CreateTranscriptionRequest(string apiKey, string audioFilePath, TranscriptionOptions options)
     {
         var request = new HttpRequestMessage(HttpMethod.Post, "audio/transcriptions");
@@ -163,6 +182,31 @@ For insert, put the final text to type in "text" and action must be null.
         return request;
     }
 
+    public static HttpRequestMessage CreateCleanupRequest(string apiKey, string transcript, string modelId, WritingCleanupTone tone)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, "chat/completions");
+        AddAuth(request, apiKey);
+
+        var body = new
+        {
+            model = string.IsNullOrWhiteSpace(modelId) ? DefaultCleanupModel : modelId,
+            temperature = 0.1,
+            max_completion_tokens = EstimateCleanupTokenLimit(transcript),
+            messages = new[]
+            {
+                new
+                {
+                    role = "system",
+                    content = BuildCleanupSystemPrompt(tone)
+                },
+                new { role = "user", content = transcript }
+            }
+        };
+
+        request.Content = new StringContent(JsonSerializer.Serialize(body, JsonOptions), Encoding.UTF8, "application/json");
+        return request;
+    }
+
     public static IntentResolution ParseIntentResponse(string responseJson, string fallbackText)
     {
         try
@@ -208,6 +252,33 @@ For insert, put the final text to type in "text" and action must be null.
         }
     }
 
+    public static string ParseTextResponse(string responseJson, string fallbackText)
+    {
+        try
+        {
+            using var response = JsonDocument.Parse(responseJson);
+            var content = response.RootElement
+                .GetProperty("choices")[0]
+                .GetProperty("message")
+                .GetProperty("content")
+                .GetString();
+
+            return string.IsNullOrWhiteSpace(content) ? fallbackText.Trim() : content.Trim();
+        }
+        catch (JsonException)
+        {
+            return fallbackText.Trim();
+        }
+        catch (KeyNotFoundException)
+        {
+            return fallbackText.Trim();
+        }
+        catch (InvalidOperationException)
+        {
+            return fallbackText.Trim();
+        }
+    }
+
     public static string MapStatusToMessage(HttpStatusCode statusCode) => statusCode switch
     {
         HttpStatusCode.Unauthorized => "The Groq API key was rejected. Check that it was copied correctly.",
@@ -245,6 +316,40 @@ For insert, put the final text to type in "text" and action must be null.
     {
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
     }
+
+    private static int EstimateCleanupTokenLimit(string transcript)
+    {
+        var roughInputTokens = Math.Max(80, transcript.Length / 4);
+        return Math.Clamp(roughInputTokens + 180, 260, 1400);
+    }
+
+    private static string BuildCleanupSystemPrompt(WritingCleanupTone tone) => tone switch
+    {
+        WritingCleanupTone.Formal => """
+You rewrite dictated speech into polished written text.
+Use a formal, professional tone with complete sentences and clear paragraphing.
+Remove filler words, false starts, repeated phrasing, and conversational clutter.
+Preserve the speaker's meaning, names, facts, and intent.
+Do not add new information.
+Return only the rewritten text.
+""",
+        WritingCleanupTone.Technical => """
+You rewrite dictated speech into clear technical writing.
+Keep technical terms, product names, numbers, commands, acronyms, and code-like wording accurate.
+Structure the result with concise paragraphs or bullets when that makes procedures or explanations easier to scan.
+Remove filler words, false starts, repeated phrasing, and conversational clutter.
+Preserve the speaker's meaning and do not add new information.
+Return only the rewritten text.
+""",
+        _ => """
+You rewrite dictated speech into a clean casual written message.
+Keep the speaker's friendly natural voice while removing filler words, false starts, repetition, and rambling.
+Use readable punctuation and short paragraphs when helpful.
+Preserve the speaker's meaning, names, facts, and intent.
+Do not make it overly formal and do not add new information.
+Return only the rewritten text.
+"""
+    };
 
     private static bool TryParseAction(JsonElement root, out VoxAction action)
     {

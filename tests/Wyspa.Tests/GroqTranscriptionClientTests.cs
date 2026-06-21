@@ -83,6 +83,26 @@ public sealed class GroqTranscriptionClientTests
     }
 
     [Fact]
+    public async Task CreateCleanupRequest_UsesToneSpecificChatPrompt()
+    {
+        using var request = GroqTranscriptionClient.CreateCleanupRequest(
+            "gsk_test",
+            "like this is basically a message",
+            "llama-3.1-8b-instant",
+            WritingCleanupTone.Technical);
+
+        var body = await request.Content!.ReadAsStringAsync();
+
+        Assert.Equal(HttpMethod.Post, request.Method);
+        Assert.Equal("chat/completions", request.RequestUri!.ToString());
+        Assert.Equal("Bearer", request.Headers.Authorization!.Scheme);
+        Assert.Equal("gsk_test", request.Headers.Authorization.Parameter);
+        Assert.Contains("\"model\":\"llama-3.1-8b-instant\"", body);
+        Assert.Contains("clear technical writing", body);
+        Assert.Contains("like this is basically a message", body);
+    }
+
+    [Fact]
     public void ParseIntentResponse_ReturnsWhitelistedAction()
     {
         var response = """
@@ -111,6 +131,34 @@ public sealed class GroqTranscriptionClientTests
 
         Assert.Equal(IntentDecisionKind.InsertText, intent.Kind);
         Assert.Equal("hello there", intent.Text);
+    }
+
+    [Fact]
+    public void ParseTextResponse_ReturnsAssistantText()
+    {
+        var response = """
+        {
+          "choices": [
+            {
+              "message": {
+                "content": "This is a clean message."
+              }
+            }
+          ]
+        }
+        """;
+
+        var cleaned = GroqTranscriptionClient.ParseTextResponse(response, "fallback");
+
+        Assert.Equal("This is a clean message.", cleaned);
+    }
+
+    [Fact]
+    public void ParseTextResponse_FallsBackOnMalformedJson()
+    {
+        var cleaned = GroqTranscriptionClient.ParseTextResponse("not json", " original text ");
+
+        Assert.Equal("original text", cleaned);
     }
 
     private sealed class StubHandler : HttpMessageHandler

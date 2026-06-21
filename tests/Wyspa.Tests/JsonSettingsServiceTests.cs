@@ -16,6 +16,9 @@ public sealed class JsonSettingsServiceTests
             Language = "en",
             StartMinimized = true,
             CopyInsertedTextToClipboard = true,
+            GroqWritingCleanupEnabled = true,
+            WritingCleanupModelId = "llama-3.1-8b-instant",
+            WritingCleanupTone = WritingCleanupTone.Formal,
             WakeToneEnabled = true,
             WakeTonePath = @"C:\Sounds\wake.wav",
             Hotkey = new HotkeySettings(HotkeyModifiers.Control | HotkeyModifiers.Shift, "F8"),
@@ -42,6 +45,9 @@ public sealed class JsonSettingsServiceTests
         Assert.Equal("en", loaded.Language);
         Assert.True(loaded.StartMinimized);
         Assert.True(loaded.CopyInsertedTextToClipboard);
+        Assert.True(loaded.GroqWritingCleanupEnabled);
+        Assert.Equal("llama-3.1-8b-instant", loaded.WritingCleanupModelId);
+        Assert.Equal(WritingCleanupTone.Formal, loaded.WritingCleanupTone);
         Assert.True(loaded.WakeToneEnabled);
         Assert.Equal(@"C:\Sounds\wake.wav", loaded.WakeTonePath);
         Assert.Equal("F8", loaded.Hotkey.Key);

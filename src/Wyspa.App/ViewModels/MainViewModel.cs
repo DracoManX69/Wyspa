@@ -417,9 +417,22 @@ public sealed class MainViewModel : ViewModelBase
                 new TranscriptionOptions(settings.ModelId, settings.Language, settings.CustomPrompt),
                 CancellationToken.None);
 
-            ScratchpadText = settings.CleanupEnabled
+            var cleaned = settings.CleanupEnabled
                 ? new TextCleanupService().Clean(transcript, settings.SpokenPunctuationEnabled)
                 : transcript.Trim();
+
+            if (settings.GroqWritingCleanupEnabled && !string.IsNullOrWhiteSpace(cleaned))
+            {
+                ScratchpadStatus = "Polishing scratchpad text...";
+                cleaned = await _groqClient.CleanupTranscriptAsync(
+                    apiKey,
+                    cleaned,
+                    settings.WritingCleanupModelId,
+                    settings.WritingCleanupTone,
+                    CancellationToken.None);
+            }
+
+            ScratchpadText = cleaned;
             ScratchpadStatus = "Scratchpad transcription complete.";
         }
         catch (Exception ex)
@@ -704,6 +717,10 @@ public sealed class MainViewModel : ViewModelBase
         Settings.AutoCaptureMinSpeechMs = Math.Clamp(Settings.AutoCaptureMinSpeechMs, 250, 3000);
         Settings.AutoCaptureWakeVoiceSensitivity = Math.Clamp(Settings.AutoCaptureWakeVoiceSensitivity, 0.0, 1.0);
         Settings.IntentConfidenceThreshold = Math.Clamp(Settings.IntentConfidenceThreshold, 0.1, 0.95);
+        if (string.IsNullOrWhiteSpace(Settings.WritingCleanupModelId))
+        {
+            Settings.WritingCleanupModelId = GroqTranscriptionClient.DefaultCleanupModel;
+        }
     }
 
     private async Task TestConnectionAsync()

@@ -16,6 +16,9 @@ public sealed class AppSettings
     public bool CopyInsertedTextToClipboard { get; set; }
     public bool CleanupEnabled { get; set; } = true;
     public bool SpokenPunctuationEnabled { get; set; } = true;
+    public bool GroqWritingCleanupEnabled { get; set; }
+    public string WritingCleanupModelId { get; set; } = "llama-3.1-8b-instant";
+    public WritingCleanupTone WritingCleanupTone { get; set; } = WritingCleanupTone.Casual;
     public bool IntentActionsEnabled { get; set; } = true;
     public string IntentModelId { get; set; } = "llama-3.3-70b-versatile";
     public double IntentConfidenceThreshold { get; set; } = 0.62;

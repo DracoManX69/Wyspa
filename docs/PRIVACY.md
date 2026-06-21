@@ -10,7 +10,7 @@ Wyspa and this privacy document were written and produced with AI assistance fro
 
 Wyspa is designed to keep local data local where possible. It does not include analytics, screenshot capture, active-window capture, or transcript logging by default.
 
-Because transcription is performed by Groq, dictated audio is sent to Groq when you use the app. If command intent is enabled, transcript text may also be sent to Groq for intent interpretation.
+Because transcription is performed by Groq, dictated audio is sent to Groq when you use the app. If Groq writing cleanup is enabled, transcript text is also sent to Groq for rewriting in the selected tone. If command intent is enabled, transcript text may also be sent to Groq for intent interpretation.
 
 ## Data Sent To Groq
 
@@ -29,6 +29,13 @@ For command intent, if enabled, Wyspa sends:
 - an instruction asking the model to classify the transcript as text insertion, action, or ignore.
 
 Command intent is used for actions such as copy, paste, cut, select all, undo, redo, Enter, Tab, Escape, Backspace, Delete, and task view.
+
+For Groq writing cleanup, if enabled, Wyspa sends:
+
+- the transcript text after basic local cleanup;
+- the selected writing cleanup model ID, normally `llama-3.1-8b-instant`;
+- the selected tone, Formal, Casual, or Technical;
+- an instruction asking the model to preserve meaning while removing filler words, false starts, and repetition.
 
 ## Data Not Intentionally Sent
 

@@ -257,6 +257,15 @@
                                 <TextBlock Text="Dictation" Style="{StaticResource SectionTitle}" />
                                 <CheckBox Content="Clean up transcripts" IsChecked="{Binding Settings.CleanupEnabled}" />
                                 <CheckBox Content="Convert spoken punctuation" IsChecked="{Binding Settings.SpokenPunctuationEnabled}" />
+                                <CheckBox Content="Rewrite dictated text with Groq" IsChecked="{Binding Settings.GroqWritingCleanupEnabled}" />
+                                <TextBlock Text="Writing tone" Style="{StaticResource FieldLabel}" />
+                                <ComboBox SelectedValue="{Binding Settings.WritingCleanupTone}" SelectedValuePath="Tag">
+                                    <ComboBoxItem Content="Formal" Tag="{x:Static models:WritingCleanupTone.Formal}" />
+                                    <ComboBoxItem Content="Casual" Tag="{x:Static models:WritingCleanupTone.Casual}" />
+                                    <ComboBoxItem Content="Technical" Tag="{x:Static models:WritingCleanupTone.Technical}" />
+                                </ComboBox>
+                                <TextBlock Text="Writing cleanup model" Style="{StaticResource FieldLabel}" />
+                                <TextBox Text="{Binding Settings.WritingCleanupModelId, UpdateSourceTrigger=PropertyChanged}" />
                                 <TextBlock Text="Insertion mode" Style="{StaticResource FieldLabel}" />
                                 <ComboBox SelectedValue="{Binding Settings.InsertionMode}" SelectedValuePath="Tag">
                                     <ComboBoxItem Content="Paste with clipboard restore" Tag="{x:Static models:InsertionMode.Paste}" />
