@@ -4,6 +4,15 @@ namespace Wyspa.Core.Services;
 
 public sealed class TextCleanupService
 {
+    private static readonly string[] NonDictationResponses =
+    [
+        "please provide the dictated speech",
+        "please provide the text",
+        "please provide the transcript",
+        "i will rewrite it",
+        "i'll rewrite it"
+    ];
+
     public string Clean(string input, bool spokenPunctuationEnabled = true)
     {
         if (string.IsNullOrWhiteSpace(input))
@@ -24,6 +33,22 @@ public sealed class TextCleanupService
         }
 
         return text;
+    }
+
+    public static bool HasTranscribableText(string? input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            return false;
+        }
+
+        var text = Regex.Replace(input.Trim(), @"\s+", " ");
+        if (!text.Any(char.IsLetterOrDigit))
+        {
+            return false;
+        }
+
+        return !NonDictationResponses.Any(response => text.StartsWith(response, StringComparison.OrdinalIgnoreCase));
     }
 
     private static string ConvertSpokenPunctuation(string text)

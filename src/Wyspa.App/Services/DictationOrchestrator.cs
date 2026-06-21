@@ -146,6 +146,12 @@ public sealed class DictationOrchestrator
                 ? _textCleanup.Clean(transcript, settings.SpokenPunctuationEnabled)
                 : transcript.Trim();
 
+            if (!TextCleanupService.HasTranscribableText(cleaned))
+            {
+                CompleteAndHide();
+                return;
+            }
+
             if (settings.IntentActionsEnabled && SpokenKeyCommandParser.TryParse(cleaned, out var keyCommand))
             {
                 await _keyboardCommand.SendAsync(keyCommand, cancellationToken);
@@ -193,6 +199,12 @@ public sealed class DictationOrchestrator
                     settings.WritingCleanupModelId,
                     settings.WritingCleanupTone,
                     cancellationToken);
+            }
+
+            if (!TextCleanupService.HasTranscribableText(cleaned))
+            {
+                CompleteAndHide();
+                return;
             }
 
             var inserted = await _textInsertion.InsertAsync(

@@ -23,4 +23,23 @@ public sealed class TextCleanupServiceTests
 
         Assert.Equal("const value = () => 1;", result);
     }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("...")]
+    [InlineData("?!")]
+    [InlineData("Please provide the dictated speech, and I will rewrite it into polished written text.")]
+    public void HasTranscribableText_RejectsEmptyNoiseAndAssistantPlaceholders(string input)
+    {
+        Assert.False(TextCleanupService.HasTranscribableText(input));
+    }
+
+    [Theory]
+    [InlineData("hello there")]
+    [InlineData("Press Enter")]
+    [InlineData("yes")]
+    public void HasTranscribableText_AllowsShortRealSpeech(string input)
+    {
+        Assert.True(TextCleanupService.HasTranscribableText(input));
+    }
 }

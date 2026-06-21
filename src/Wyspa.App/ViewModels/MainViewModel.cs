@@ -421,6 +421,13 @@ public sealed class MainViewModel : ViewModelBase
                 ? new TextCleanupService().Clean(transcript, settings.SpokenPunctuationEnabled)
                 : transcript.Trim();
 
+            if (!TextCleanupService.HasTranscribableText(cleaned))
+            {
+                ScratchpadText = string.Empty;
+                ScratchpadStatus = "No transcribable speech was detected.";
+                return;
+            }
+
             if (settings.GroqWritingCleanupEnabled && !string.IsNullOrWhiteSpace(cleaned))
             {
                 ScratchpadStatus = "Polishing scratchpad text...";
@@ -430,6 +437,13 @@ public sealed class MainViewModel : ViewModelBase
                     settings.WritingCleanupModelId,
                     settings.WritingCleanupTone,
                     CancellationToken.None);
+            }
+
+            if (!TextCleanupService.HasTranscribableText(cleaned))
+            {
+                ScratchpadText = string.Empty;
+                ScratchpadStatus = "No transcribable speech was detected.";
+                return;
             }
 
             ScratchpadText = cleaned;
