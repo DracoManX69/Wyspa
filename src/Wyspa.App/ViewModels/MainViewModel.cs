@@ -44,6 +44,7 @@ public sealed class MainViewModel : ViewModelBase
     private readonly List<float> _wakeVoiceSamples = [];
     private CancellationTokenSource? _wakeVoiceRecordingCts;
     private int _wakeTrainingPromptIndex;
+    private bool _wakeVoiceStartedLevelMonitor;
     private bool _hasApiKey;
     private bool _isScratchpadRecording;
     private bool _isWakeVoiceRecording;
@@ -540,10 +541,10 @@ public sealed class MainViewModel : ViewModelBase
             return;
         }
 
-        StartWakeVoiceRecording();
+        await StartWakeVoiceRecordingAsync();
     }
 
-    private void StartWakeVoiceRecording()
+    private async Task StartWakeVoiceRecordingAsync()
     {
         if (_audioCapture.IsRecording)
         {
@@ -556,13 +557,29 @@ public sealed class MainViewModel : ViewModelBase
             _wakeVoiceSamples.Clear();
         }
 
-        _wakeVoiceRecordingCts?.Cancel();
-        _wakeVoiceRecordingCts = new CancellationTokenSource();
-        IsWakeVoiceRecording = true;
-        WakeVoiceStatus = WakeTrainingPrompts[_wakeTrainingPromptIndex].Kind is WakeTrainingPromptKind.WakePhrase
-            ? "Say the wake phrase, then pause."
-            : "Read the training sentence in your normal voice.";
-        _ = AutoStopWakeVoiceRecordingAsync(_wakeVoiceRecordingCts.Token);
+        try
+        {
+            _wakeVoiceRecordingCts?.Cancel();
+            _wakeVoiceRecordingCts = new CancellationTokenSource();
+            _wakeVoiceStartedLevelMonitor = false;
+            if (!_levelMonitor.IsRunning)
+            {
+                await _levelMonitor.StartAsync(Settings.MicrophoneDeviceId, CancellationToken.None);
+                _wakeVoiceStartedLevelMonitor = true;
+            }
+
+            IsWakeVoiceRecording = true;
+            WakeVoiceStatus = WakeTrainingPrompts[_wakeTrainingPromptIndex].Kind is WakeTrainingPromptKind.WakePhrase
+                ? "Say the wake phrase, then pause."
+                : "Read the training sentence in your normal voice.";
+            _ = AutoStopWakeVoiceRecordingAsync(_wakeVoiceRecordingCts.Token);
+        }
+        catch (Exception ex)
+        {
+            StopWakeVoiceLevelMonitorIfStarted();
+            IsWakeVoiceRecording = false;
+            WakeVoiceStatus = ex.Message;
+        }
     }
 
     private async Task AutoStopWakeVoiceRecordingAsync(CancellationToken cancellationToken)
@@ -591,6 +608,7 @@ public sealed class MainViewModel : ViewModelBase
         IsWakeVoiceRecording = false;
         if (!saveProfile)
         {
+            StopWakeVoiceLevelMonitorIfStarted();
             return;
         }
 
@@ -619,6 +637,21 @@ public sealed class MainViewModel : ViewModelBase
         {
             WakeVoiceStatus = ex.Message;
         }
+        finally
+        {
+            StopWakeVoiceLevelMonitorIfStarted();
+        }
+    }
+
+    private void StopWakeVoiceLevelMonitorIfStarted()
+    {
+        if (!_wakeVoiceStartedLevelMonitor)
+        {
+            return;
+        }
+
+        _levelMonitor.Stop();
+        _wakeVoiceStartedLevelMonitor = false;
     }
 
     private void OnWakeVoiceAudioAvailable(object? sender, IReadOnlyList<float> samples)

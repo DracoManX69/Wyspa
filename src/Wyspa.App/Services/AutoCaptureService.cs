@@ -68,14 +68,17 @@ public sealed class AutoCaptureService : IDisposable
         {
             SetSettings(settings, hasApiKey);
             _overlay.SetOpacity(settings.OverlayOpacity);
-            if (!_audioCapture.IsRecording)
+            if (_audioCapture.IsRecording || !ShouldMonitorRun(settings, hasApiKey))
             {
-                if (!_monitor.IsRunning || !string.Equals(_monitorDeviceId, settings.MicrophoneDeviceId, StringComparison.Ordinal))
-                {
-                    _monitor.Stop();
-                    _monitorDeviceId = settings.MicrophoneDeviceId;
-                    await _monitor.StartAsync(settings.MicrophoneDeviceId, cancellationToken);
-                }
+                _monitor.Stop();
+                return;
+            }
+
+            if (!_monitor.IsRunning || !string.Equals(_monitorDeviceId, settings.MicrophoneDeviceId, StringComparison.Ordinal))
+            {
+                _monitor.Stop();
+                _monitorDeviceId = settings.MicrophoneDeviceId;
+                await _monitor.StartAsync(settings.MicrophoneDeviceId, cancellationToken);
             }
         }
         finally
@@ -257,6 +260,13 @@ public sealed class AutoCaptureService : IDisposable
         }
 
         await Task.Delay(200);
+        settings = GetSettingsSnapshot();
+        if (!ShouldMonitorRun(settings))
+        {
+            _monitor.Stop();
+            return;
+        }
+
         if (!_monitor.IsRunning)
         {
             _monitorDeviceId = settings.MicrophoneDeviceId;
@@ -281,6 +291,13 @@ public sealed class AutoCaptureService : IDisposable
 
     private bool WakeVoiceGateSatisfied(AppSettings settings, DateTimeOffset now) =>
         !settings.AutoCaptureWakeVoiceEnabled || now <= _wakeVoiceAcceptedUntil;
+
+    private bool ShouldMonitorRun(AppSettings settings) => ShouldMonitorRun(settings, _hasApiKey);
+
+    private static bool ShouldMonitorRun(AppSettings settings, bool hasApiKey) =>
+        hasApiKey &&
+        settings.ActivationMode is ActivationMode.AutoCapture &&
+        settings.AutoCaptureListeningEnabled;
 
     private void RunOnAppDispatcher(Func<Task> action)
     {

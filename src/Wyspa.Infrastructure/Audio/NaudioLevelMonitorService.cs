@@ -52,6 +52,7 @@ public sealed class NaudioLevelMonitorService : IAudioLevelMonitorService
         _waveIn.StopRecording();
         _waveIn.Dispose();
         _waveIn = null;
+        LevelAvailable?.Invoke(this, 0f);
     }
 
     public void Dispose()

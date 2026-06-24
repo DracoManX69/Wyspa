@@ -192,7 +192,7 @@
                                     <StackPanel>
                                         <StackPanel Orientation="Horizontal">
                                             <TextBlock Text="Microphone" Foreground="{DynamicResource InkBrush}" FontWeight="SemiBold" />
-                                            <Border Style="{StaticResource HeaderHelpIcon}" ToolTip="Microphone&#x0a;- Select the Windows input device Wyspa records from.&#x0a;- Refresh after plugging in or changing devices.&#x0a;- The level meter runs even outside AutoCapture.">
+                                            <Border Style="{StaticResource HeaderHelpIcon}" ToolTip="Microphone&#x0a;- Select the Windows input device Wyspa records from.&#x0a;- Refresh after plugging in or changing devices.&#x0a;- Wyspa releases the mic when listening, recording, and training are off.">
                                                 <TextBlock Style="{StaticResource HeaderHelpText}" />
                                             </Border>
                                         </StackPanel>
