@@ -7,6 +7,7 @@ using Wyspa.Core.Services;
 using Wyspa.Infrastructure.Audio;
 using Wyspa.Infrastructure.Hotkeys;
 using Wyspa.Infrastructure.Insertion;
+using Wyspa.Infrastructure.Media;
 using Wyspa.Infrastructure.Settings;
 using Wyspa.Infrastructure.Startup;
 
@@ -25,6 +26,7 @@ public partial class App : System.Windows.Application
     private ThemeService? _themeService;
     private NaudioLevelMonitorService? _levelMonitor;
     private AutoCaptureService? _autoCaptureService;
+    private WindowsAutoCaptureMediaControlService? _mediaControlService;
     private HttpClient? _httpClient;
     private bool _isQuitting;
 
@@ -105,6 +107,7 @@ public partial class App : System.Windows.Application
             var overlayService = new OverlayStatusService(() => _overlay ??= new StatusOverlayWindow());
             var wakeToneService = new WakeToneService();
             var autoCaptureToggleFeedbackService = new AutoCaptureToggleFeedbackService(overlayService);
+            _mediaControlService = new WindowsAutoCaptureMediaControlService();
 
             var orchestrator = new DictationOrchestrator(
                 settingsService,
@@ -116,7 +119,7 @@ public partial class App : System.Windows.Application
                 keyboardCommandService,
                 overlayService);
 
-            _viewModel = new MainViewModel(settingsService, secretStore, groqClient, _audioCapture, _levelMonitor, _hotkeyService, _autoCaptureHotkeyService, startupService, orchestrator, updateService);
+            _viewModel = new MainViewModel(settingsService, secretStore, groqClient, _audioCapture, _levelMonitor, _hotkeyService, _autoCaptureHotkeyService, startupService, orchestrator, updateService, _mediaControlService);
             _autoCaptureService = new AutoCaptureService(settingsService, secretStore, _levelMonitor, _audioCapture, orchestrator, overlayService, wakeToneService);
             _trayService = new TrayService(_viewModel, startupService, ShowMainWindow, QuitAsync);
             overlayService.NotificationRequested += (_, message) => _trayService?.ShowNotification(message);
@@ -226,6 +229,18 @@ public partial class App : System.Windows.Application
         _trayService?.Dispose();
         _hotkeyService?.Dispose();
         _autoCaptureHotkeyService?.Dispose();
+        if (_mediaControlService is not null)
+        {
+            try
+            {
+                await _mediaControlService.RestoreAsync(CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                CrashLogService.Log(ex);
+            }
+        }
+
         if (_audioCapture is not null)
         {
             await _audioCapture.DisposeAsync();

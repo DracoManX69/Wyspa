@@ -54,6 +54,8 @@ Wyspa does not intentionally send:
 
 The transcript is placed on the local clipboard when paste insertion is used. This happens locally so Wyspa can paste into the active app.
 
+If AutoCapture media handling is enabled, Wyspa may locally mute the default Windows output device or send the standard Windows play/pause media key while AutoCapture listening is on. Wyspa does not inspect track names, app media libraries, or what audio is playing.
+
 ## Data Stored Locally
 
 Wyspa stores non-secret settings in:
@@ -70,6 +72,7 @@ Examples include:
 - model IDs;
 - tone re-write prompts;
 - overlay opacity;
+- AutoCapture media handling;
 - insertion mode;
 - start minimized/start with Windows settings;
 - privacy-related toggles such as audio retention and history settings.

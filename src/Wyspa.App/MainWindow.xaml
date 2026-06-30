@@ -258,6 +258,17 @@
                                                   IsChecked="{Binding Settings.AutoCaptureListeningEnabled}"
                                                   ToolTip="Turns AutoCapture's always-listening state on or off. This can also be toggled from the tray menu or the AutoCapture listening shortcut." />
                                         <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="AutoCapture Media Handling" Style="{StaticResource FieldLabel}" />
+                                            <Border Style="{StaticResource HeaderHelpIcon}" ToolTip="AutoCapture Media Handling&#x0a;- Do Nothing: leave system audio alone.&#x0a;- Mute System Output: mute while listening, then restore the previous mute state.&#x0a;- Pause or Resume Media: sends the Windows play/pause key when listening turns on and again when it turns off.">
+                                                <TextBlock Style="{StaticResource HeaderHelpText}" />
+                                            </Border>
+                                        </StackPanel>
+                                        <ComboBox SelectedValue="{Binding Settings.AutoCaptureMediaBehavior}" SelectedValuePath="Tag">
+                                            <ComboBoxItem Content="Do Nothing" Tag="{x:Static models:AutoCaptureMediaBehavior.None}" />
+                                            <ComboBoxItem Content="Mute System Output" Tag="{x:Static models:AutoCaptureMediaBehavior.MuteSystemOutput}" />
+                                            <ComboBoxItem Content="Pause or Resume Media" Tag="{x:Static models:AutoCaptureMediaBehavior.TogglePlayPause}" />
+                                        </ComboBox>
+                                        <StackPanel Orientation="Horizontal">
                                             <TextBlock Text="Current Shortcut" Style="{StaticResource FieldLabel}" />
                                             <Border Style="{StaticResource HeaderHelpIcon}" ToolTip="Current Shortcut&#x0a;- Click the box and press the shortcut.&#x0a;- Save Hotkey finishes recording it.&#x0a;- F13-F24 macro keys can be used without modifiers.">
                                                 <TextBlock Style="{StaticResource HeaderHelpText}" />

@@ -13,6 +13,7 @@ Wyspa was written effectively entirely by Codex with some cleaver interfacing wi
 - Windows tray app with compact settings UI.
 - Toggle, hold-to-talk, and AutoCapture trigger modes.
 - Configurable global hotkey, including macro keys such as `F13`-`F24`.
+- Optional AutoCapture media handling to mute system output or send play/pause while listening.
 - Groq Whisper transcription using `whisper-large-v3-turbo`.
 - Optional Groq writing cleanup with Formal, Casual, and Technical tones plus editable re-write prompts.
 - Optional Groq intent model for commands such as copy, paste, Enter, Escape, task view, and related actions.
@@ -45,7 +46,7 @@ For development:
 For a GitHub release, download:
 
 ```text
-WyspaSetup-0.5.7-win-x64.exe
+WyspaSetup-0.6.0-win-x64.exe
 ```
 
 Run the installer and follow the wizard. The installer places Wyspa in your user profile by default, offers Start Menu and desktop shortcut options, and registers Wyspa in Windows Apps & Features.
@@ -62,8 +63,9 @@ The installer checks for the .NET 10 Desktop Runtime x64. If it is missing, setu
 4. Click Test connection.
 5. Choose your microphone in Input.
 6. Set your preferred trigger mode and hotkey.
-7. Optional: enable Groq writing cleanup in Behavior and choose Formal, Casual, or Technical tone.
-8. Open the scratchpad or another text field and try a short dictation.
+7. Optional: in Input, choose whether AutoCapture should leave media alone, mute system output, or send play/pause while listening.
+8. Optional: enable Groq writing cleanup in Behavior and choose Formal, Casual, or Technical tone.
+9. Open the scratchpad or another text field and try a short dictation.
 
 ## Groq API Key
 
@@ -117,7 +119,7 @@ Create the Windows installer:
 This produces:
 
 ```text
-artifacts\installer\WyspaSetup-0.5.7-win-x64.exe
+artifacts\installer\WyspaSetup-0.6.0-win-x64.exe
 ```
 
 ## Release Files
@@ -125,7 +127,7 @@ artifacts\installer\WyspaSetup-0.5.7-win-x64.exe
 For a GitHub release, upload the installer:
 
 ```text
-artifacts\installer\WyspaSetup-0.5.7-win-x64.exe
+artifacts\installer\WyspaSetup-0.6.0-win-x64.exe
 ```
 
 Optional secondary asset:
@@ -142,7 +144,7 @@ Wyspa sends microphone audio for each dictation to Groq, along with the selected
 
 When you use Check for Updates, Wyspa calls the public GitHub latest-release endpoint for this repository and compares the latest release version with the installed app version.
 
-Wyspa does not take screenshots, capture active-window contents, record keystroke history, or intentionally log transcripts. See [docs/PRIVACY.md](docs/PRIVACY.md) for details.
+Wyspa does not take screenshots, capture active-window contents, record keystroke history, or intentionally log transcripts. AutoCapture media handling only uses Windows output mute state or the standard media play/pause key; it does not inspect what you are playing. See [docs/PRIVACY.md](docs/PRIVACY.md) for details.
 
 ## Uninstall
 

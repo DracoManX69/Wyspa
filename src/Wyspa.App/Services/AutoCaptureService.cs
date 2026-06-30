@@ -411,6 +411,7 @@ public sealed class AutoCaptureService : IDisposable
         AutoCaptureSilenceMs = settings.AutoCaptureSilenceMs,
         AutoCaptureMinSpeechMs = settings.AutoCaptureMinSpeechMs,
         AutoCaptureListeningEnabled = settings.AutoCaptureListeningEnabled,
+        AutoCaptureMediaBehavior = settings.AutoCaptureMediaBehavior,
         AutoCaptureWakeVoiceEnabled = settings.AutoCaptureWakeVoiceEnabled,
         AutoCaptureWakeVoiceSensitivity = settings.AutoCaptureWakeVoiceSensitivity,
         AutoCaptureWakeVoiceProfile = settings.AutoCaptureWakeVoiceProfile,

@@ -14,7 +14,7 @@ If setup says .NET is missing:
 
 1. Let the installer open the Microsoft runtime page or installer.
 2. Install the .NET 10 Desktop Runtime x64.
-3. Run `WyspaSetup-0.5.7-win-x64.exe` again.
+3. Run `WyspaSetup-0.6.0-win-x64.exe` again.
 
 The Wyspa installer does not currently install .NET silently inside the wizard.
 
@@ -127,6 +127,18 @@ If recording a shortcut fails:
 - use macro keys such as `F13`-`F24` where possible.
 
 Combos such as `Ctrl+F4` should be supported.
+
+## AutoCapture Media Handling Does Not Affect Music
+
+Open Settings > Input and check AutoCapture Media Handling.
+
+Options:
+
+- Do Nothing leaves audio untouched.
+- Mute System Output mutes the default Windows output device while AutoCapture listening is on, then restores the previous mute state.
+- Pause or Resume Media sends the standard Windows play/pause media key when listening turns on and again when listening turns off.
+
+If play/pause does nothing, the current media app may not respond to Windows media keys. Try the mute option instead.
 
 ## Hold To Talk Does Not Stop
 

@@ -33,6 +33,7 @@ public sealed class MainViewModel : ViewModelBase
     private readonly IStartupService _startupService;
     private readonly DictationOrchestrator _orchestrator;
     private readonly GitHubUpdateService _updateService;
+    private readonly IAutoCaptureMediaControlService _mediaControlService;
     private string _apiKey = string.Empty;
     private string _connectionMessage = "Add a Groq API key to enable transcription.";
     private string _hotkeyText = HotkeySettings.Default.DisplayText;
@@ -51,6 +52,8 @@ public sealed class MainViewModel : ViewModelBase
     private bool _startWithWindows;
     private bool _isCheckingForUpdates;
     private bool _isUpdateAvailable;
+    private bool _lastMediaListeningState;
+    private AutoCaptureMediaBehavior _lastMediaBehavior = AutoCaptureMediaBehavior.None;
     private string _updateStatus = "Updates have not been checked.";
     private string? _updateUrl;
     private float _microphoneLevel;
@@ -66,7 +69,8 @@ public sealed class MainViewModel : ViewModelBase
         IHotkeyService autoCaptureHotkeyService,
         IStartupService startupService,
         DictationOrchestrator orchestrator,
-        GitHubUpdateService updateService)
+        GitHubUpdateService updateService,
+        IAutoCaptureMediaControlService mediaControlService)
     {
         _settingsService = settingsService;
         _secretStore = secretStore;
@@ -78,6 +82,7 @@ public sealed class MainViewModel : ViewModelBase
         _startupService = startupService;
         _orchestrator = orchestrator;
         _updateService = updateService;
+        _mediaControlService = mediaControlService;
         Settings = new AppSettings();
         Devices = [];
         SaveCommand = new AsyncRelayCommand(SaveHotkeyAsync);
@@ -307,6 +312,9 @@ public sealed class MainViewModel : ViewModelBase
             ConnectionMessage = "Groq key is saved locally with Windows user protection.";
         }
 
+        _lastMediaListeningState = IsAutoCaptureListening;
+        _lastMediaBehavior = Settings.AutoCaptureMediaBehavior;
+
         await LoadDevicesAsync();
         RegisterHotkeys();
         OnPropertyChanged(nameof(Settings));
@@ -368,12 +376,24 @@ public sealed class MainViewModel : ViewModelBase
         if (!await EnsureApiKeyAvailableAsync())
         {
             Settings.AutoCaptureListeningEnabled = false;
+            await ApplyAutoCaptureMediaBehaviorAsync(isListening: false, force: true);
             await AutoSaveSettingsAsync("Add a Groq API key before enabling AutoCapture listening.");
             return;
         }
 
         Settings.AutoCaptureListeningEnabled = !Settings.AutoCaptureListeningEnabled;
+        var isListening = IsAutoCaptureListening;
+        if (isListening)
+        {
+            await ApplyAutoCaptureMediaBehaviorAsync(isListening: true, force: true);
+        }
+
         await SaveSettingsCoreAsync(registerHotkey: false, updateMessage: false);
+        if (!isListening)
+        {
+            await ApplyAutoCaptureMediaBehaviorAsync(isListening: false, force: true);
+        }
+
         ConnectionMessage = Settings.AutoCaptureListeningEnabled
             ? "AutoCapture listening is on."
             : "AutoCapture listening is off.";
@@ -771,6 +791,7 @@ public sealed class MainViewModel : ViewModelBase
     public void ApplyLiveSettings()
     {
         ClampSettings();
+        _ = ApplyAutoCaptureMediaBehaviorAsync(IsAutoCaptureListening, force: false);
         OnPropertyChanged(nameof(IsAutoCaptureMode));
         OnPropertyChanged(nameof(IsAutoCaptureListening));
         OnPropertyChanged(nameof(CanListen));
@@ -784,6 +805,27 @@ public sealed class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(Settings));
         SettingsChanged?.Invoke(this, EventArgs.Empty);
         AutoCaptureListeningChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private async Task ApplyAutoCaptureMediaBehaviorAsync(bool isListening, bool force)
+    {
+        if (!force &&
+            isListening == _lastMediaListeningState &&
+            Settings.AutoCaptureMediaBehavior == _lastMediaBehavior)
+        {
+            return;
+        }
+
+        try
+        {
+            await _mediaControlService.SetListeningStateAsync(Settings.AutoCaptureMediaBehavior, isListening, CancellationToken.None);
+            _lastMediaListeningState = isListening;
+            _lastMediaBehavior = Settings.AutoCaptureMediaBehavior;
+        }
+        catch (Exception ex)
+        {
+            CrashLogService.Log(ex);
+        }
     }
 
     private async Task SaveSettingsCoreAsync(bool registerHotkey, bool updateMessage)
@@ -914,6 +956,7 @@ public sealed class MainViewModel : ViewModelBase
         HasApiKey = false;
         ApiKey = string.Empty;
         Settings.AutoCaptureListeningEnabled = false;
+        await ApplyAutoCaptureMediaBehaviorAsync(isListening: false, force: true);
         await _settingsService.SaveAsync(Settings, CancellationToken.None);
         ConnectionMessage = "Groq API key removed from this Windows user profile.";
         OnPropertyChanged(nameof(Settings));

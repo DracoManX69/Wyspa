@@ -32,6 +32,7 @@ public sealed class AppSettings
     public int AutoCaptureSilenceMs { get; set; } = 1200;
     public int AutoCaptureMinSpeechMs { get; set; } = 650;
     public bool AutoCaptureListeningEnabled { get; set; } = true;
+    public AutoCaptureMediaBehavior AutoCaptureMediaBehavior { get; set; } = AutoCaptureMediaBehavior.None;
     public bool AutoCaptureWakeVoiceEnabled { get; set; }
     public double AutoCaptureWakeVoiceSensitivity { get; set; } = 0.62;
     public WakeVoiceProfile? AutoCaptureWakeVoiceProfile { get; set; }
