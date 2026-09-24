@@ -15,6 +15,7 @@
     <ProjectReference Include="..\Wyspa.Infrastructure\Wyspa.Infrastructure.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="Tools\Flac\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
     <Resource Include="Assets\AppIcon.ico" />
     <Resource Include="Assets\AppLogo.png" />
     <Resource Include="Assets\WakeTone.wav" />

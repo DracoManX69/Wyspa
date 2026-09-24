@@ -325,6 +325,7 @@ public partial class MainWindow : Window
 
     private void AutoSaveComboBox_OnSelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
     {
+        if (e.OriginalSource is not System.Windows.Controls.ComboBox) return;
         QueueSettingsChange(saveImmediately: true);
     }
 
@@ -335,6 +336,7 @@ public partial class MainWindow : Window
 
     private void AutoSaveTextBox_OnLostFocus(object sender, RoutedEventArgs e)
     {
+        if (e.OriginalSource is System.Windows.Controls.TextBox { IsReadOnly: true }) return;
         if (ReferenceEquals(e.OriginalSource, HotkeyRecorderBox) ||
             ReferenceEquals(e.OriginalSource, AutoCaptureHotkeyRecorderBox) ||
             ReferenceEquals(e.OriginalSource, ApiKeyBox))

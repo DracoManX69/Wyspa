@@ -6,6 +6,75 @@ namespace Wyspa.Tests;
 
 public sealed class GroqTranscriptionClientTests
 {
+    [Theory]
+    [InlineData(".flac", "audio/flac")]
+    [InlineData(".mp3", "audio/mpeg")]
+    [InlineData(".m4a", "audio/mp4")]
+    [InlineData(".ogg", "audio/ogg")]
+    [InlineData(".webm", "audio/webm")]
+    [InlineData(".wav", "audio/wav")]
+    public void FileUpload_UsesCorrectContentTypeAndStreaming(string extension, string expected)
+    {
+        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + extension);
+        File.WriteAllBytes(path, [1, 2, 3]);
+        try
+        {
+            using var request = GroqTranscriptionClient.CreateTranscriptionRequest("test", path, new TranscriptionOptions("whisper-large-v3-turbo", null, null));
+            var file = ((MultipartFormDataContent)request.Content!).Last();
+            Assert.IsType<StreamContent>(file);
+            Assert.Equal(expected, file.Headers.ContentType!.MediaType);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public async Task FileUpload_RetryReopensCompleteStream_AndReleasesFile()
+    {
+        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".flac");
+        await File.WriteAllTextAsync(path, "audio-test-payload");
+        var attempts = 0;
+        using var http = new HttpClient(new AsyncStubHandler(async (request, token) =>
+        {
+            var body = await request.Content!.ReadAsStringAsync(token);
+            Assert.Contains("audio-test-payload", body);
+            attempts++;
+            return new HttpResponseMessage(attempts == 1 ? HttpStatusCode.ServiceUnavailable : HttpStatusCode.OK)
+            {
+                Content = new StringContent("transcribed")
+            };
+        }));
+        try
+        {
+            var result = await new GroqTranscriptionClient(http).TranscribeAsync("test", path, new TranscriptionOptions("whisper-large-v3-turbo", null, null), CancellationToken.None);
+            Assert.Equal("transcribed", result);
+            Assert.Equal(2, attempts);
+            using var exclusive = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public async Task FileUpload_CancellationStopsRetryDelay()
+    {
+        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".flac");
+        await File.WriteAllBytesAsync(path, [1]);
+        using var cancellation = new CancellationTokenSource();
+        var attempts = 0;
+        using var http = new HttpClient(new StubHandler(_ =>
+        {
+            attempts++;
+            cancellation.Cancel();
+            return new HttpResponseMessage((HttpStatusCode)429);
+        }));
+        try
+        {
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => new GroqTranscriptionClient(http).TranscribeAsync("test", path,
+                new TranscriptionOptions("whisper-large-v3-turbo", null, null), cancellation.Token));
+            Assert.Equal(1, attempts);
+        }
+        finally { File.Delete(path); }
+    }
+
     [Fact]
     public async Task TestConnection_ConfirmsModelAvailability()
     {
@@ -190,5 +259,10 @@ public sealed class GroqTranscriptionClientTests
         {
             return Task.FromResult(_handler(request));
         }
+    }
+
+    private sealed class AsyncStubHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> handler) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) => handler(request, cancellationToken);
     }
 }

@@ -1,0 +1,50 @@
+<UserControl x:Class="Wyspa.App.FileTranscriptionView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanVisibility" />
+    </UserControl.Resources>
+    <ScrollViewer Padding="8" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel>
+            <TextBlock Text="Transcribe audio files" Style="{StaticResource SectionTitle}" />
+            <TextBlock Text="Transcribe local recordings with your saved Groq connection." Style="{StaticResource BodyText}" />
+            <Border Style="{StaticResource Card}" Margin="0,8,0,7">
+                <StackPanel>
+                    <TextBlock Text="Lossless preparation on your PC. Original files stay untouched." Style="{StaticResource BodyText}"
+                               ToolTip="WAV and AIFF are compressed losslessly where possible. Compressed audio keeps its original format. Large PCM/FLAC files are split automatically. Uses your transcription model, language and vocabulary settings; skips AI rewriting and command interpretation." />
+                    <WrapPanel Margin="0,5,0,0">
+                        <Button Content="Choose files…" Click="ChooseFiles_OnClick" IsEnabled="{Binding CanChooseFiles}" />
+                        <Button Content="Transcribe" Style="{StaticResource PrimaryButton}" Command="{Binding TranscribeCommand}" />
+                        <Button Content="Cancel" Command="{Binding CancelCommand}" />
+                        <Button Content="Clear" Command="{Binding ClearCommand}" />
+                    </WrapPanel>
+                    <TextBlock Text="WAV, FLAC, MP3, M4A, OGG, WebM, MPGA, AIFF" Style="{StaticResource BodyText}" FontSize="11" />
+                </StackPanel>
+            </Border>
+            <TextBlock Text="{Binding Status}" Style="{StaticResource BodyText}" AutomationProperties.LiveSetting="Polite" Margin="0,0,0,5" />
+            <ProgressBar Height="3" IsIndeterminate="{Binding IsBusy}" Visibility="{Binding IsBusy, Converter={StaticResource BooleanVisibility}}" Margin="0,0,0,6" />
+            <ListBox ItemsSource="{Binding Files}" SelectedItem="{Binding SelectedFile}" Height="104"
+                     Background="{DynamicResource InputBrush}" Foreground="{DynamicResource InkBrush}"
+                     BorderBrush="{DynamicResource LineBrush}" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     HorizontalContentAlignment="Stretch" AutomationProperties.Name="Selected audio files">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <StackPanel Margin="2">
+                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" ToolTip="{Binding Path}" />
+                            <TextBlock Text="{Binding Status}" FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource MutedBrush}" />
+                        </StackPanel>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+            <TextBlock Text="{Binding SelectedFile.Details}" Style="{StaticResource BodyText}" FontSize="11" Margin="0,5,0,5" />
+            <TextBlock Text="Transcript" Style="{StaticResource FieldLabel}" />
+            <TextBox Text="{Binding SelectedFile.Transcript, Mode=OneWay}" IsReadOnly="True" Height="180"
+                     TextWrapping="Wrap" AcceptsReturn="True" VerticalScrollBarVisibility="Auto"
+                     AutomationProperties.Name="File transcript" />
+            <WrapPanel>
+                <Button Content="Copy transcript" Click="CopyTranscript_OnClick" IsEnabled="{Binding SelectedFile.HasTranscript, FallbackValue=False, TargetNullValue=False}" />
+                <Button Content="Save text…" Click="SaveTranscript_OnClick" IsEnabled="{Binding SelectedFile.HasTranscript, FallbackValue=False, TargetNullValue=False}" />
+            </WrapPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

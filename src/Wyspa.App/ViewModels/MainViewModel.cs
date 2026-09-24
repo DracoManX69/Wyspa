@@ -109,6 +109,7 @@ public sealed class MainViewModel : ViewModelBase
     public event EventHandler? StartupSettingChanged;
 
     public AppSettings Settings { get; private set; }
+    public FileTranscriptionViewModel FileTranscription { get; set; } = null!;
     public ObservableCollection<AudioDeviceInfo> Devices { get; }
     public ICommand SaveCommand { get; }
     public ICommand SaveAutoCaptureHotkeyCommand { get; }
@@ -433,6 +434,7 @@ public sealed class MainViewModel : ViewModelBase
 
     public async Task StopIfNeededAsync()
     {
+        await FileTranscription.StopAsync();
         await _orchestrator.StopIfNeededAsync();
     }
 
@@ -951,6 +953,7 @@ public sealed class MainViewModel : ViewModelBase
 
     private async Task RemoveKeyAsync()
     {
+        await FileTranscription.StopAsync();
         await _orchestrator.StopIfNeededAsync();
         await _secretStore.RemoveApiKeyAsync(CancellationToken.None);
         HasApiKey = false;

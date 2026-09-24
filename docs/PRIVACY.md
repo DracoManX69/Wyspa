@@ -16,7 +16,7 @@ Because transcription is performed by Groq, dictated audio is sent to Groq when 
 
 For transcription, Wyspa sends:
 
-- the microphone audio clip for the current dictation;
+- the microphone audio clip for the current dictation, or audio files explicitly selected in Audio Files after you click Transcribe;
 - the selected transcription model ID, normally `whisper-large-v3-turbo`;
 - optional language setting, such as `en`;
 - optional custom prompt or vocabulary text;
@@ -47,7 +47,7 @@ Wyspa does not intentionally send:
 - active-window contents;
 - clipboard contents;
 - keystroke history;
-- file contents from your computer;
+- file contents other than audio files you explicitly choose to transcribe;
 - saved transcripts;
 - crash logs;
 - your Groq API key, except as the authorization header required to call Groq.
@@ -135,3 +135,11 @@ You can also remove the saved Groq key from inside Wyspa settings.
 ## Third-Party Service
 
 Groq processes the audio and optional transcript text sent through its API. Review Groq's own terms and privacy documentation before using Wyspa with sensitive information.
+
+## File Transcription
+
+Audio Files uses local lossless compression where applicable before uploading to Groq. It preserves source audio quality and never modifies or deletes source files. Selection alone does not upload audio. File names may accompany the multipart upload; full local paths are not sent.
+
+File transcription uses the saved transcription model, language, and custom vocabulary prompt. It does not send transcripts to writing cleanup or intent models. Temporary compressed/split files are removed after success, failure, or cancellation, regardless of the microphone debug-retention setting. A crash or forced termination may leave files under `%TEMP%\Wyspa\FileTranscription`.
+
+File transcripts are held in memory until cleared or the app exits. Copy and Save are explicit local actions. Cancellation stops future uploads but cannot recall audio already sent to Groq.

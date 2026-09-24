@@ -28,6 +28,7 @@ public partial class App : System.Windows.Application
     private AutoCaptureService? _autoCaptureService;
     private WindowsAutoCaptureMediaControlService? _mediaControlService;
     private HttpClient? _httpClient;
+    private HttpClient? _fileHttpClient;
     private bool _isQuitting;
 
     public App()
@@ -120,6 +121,11 @@ public partial class App : System.Windows.Application
                 overlayService);
 
             _viewModel = new MainViewModel(settingsService, secretStore, groqClient, _audioCapture, _levelMonitor, _hotkeyService, _autoCaptureHotkeyService, startupService, orchestrator, updateService, _mediaControlService);
+            _fileHttpClient = new HttpClient();
+            _viewModel.FileTranscription = new FileTranscriptionViewModel(
+                new AudioFilePreparationService(System.IO.Path.Combine(AppContext.BaseDirectory, "Tools", "Flac", "flac.exe")),
+                new GroqTranscriptionClient(_fileHttpClient, TimeSpan.FromMinutes(10)),
+                secretStore, () => _viewModel.Settings);
             _autoCaptureService = new AutoCaptureService(settingsService, secretStore, _levelMonitor, _audioCapture, orchestrator, overlayService, wakeToneService);
             _trayService = new TrayService(_viewModel, startupService, ShowMainWindow, QuitAsync);
             overlayService.NotificationRequested += (_, message) => _trayService?.ShowNotification(message);
@@ -227,6 +233,8 @@ public partial class App : System.Windows.Application
     protected override async void OnExit(ExitEventArgs e)
     {
         _trayService?.Dispose();
+        _viewModel?.FileTranscription.Cancel();
+        _fileHttpClient?.Dispose();
         _hotkeyService?.Dispose();
         _autoCaptureHotkeyService?.Dispose();
         if (_mediaControlService is not null)

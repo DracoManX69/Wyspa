@@ -10,5 +10,10 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Wyspa.Core\Wyspa.Core.csproj" />
+    <Compile Include="..\..\src\Wyspa.App\ViewModels\FileTranscriptionViewModel.cs" Link="FileTranscriptionViewModel.cs" />
+    <Compile Include="..\..\src\Wyspa.App\ViewModels\ViewModelBase.cs" Link="ViewModelBase.cs" />
+    <Compile Include="..\..\src\Wyspa.App\ViewModels\AsyncRelayCommand.cs" Link="AsyncRelayCommand.cs" />
+    <Content Include="..\..\src\Wyspa.App\Tools\Flac\flac.exe" Link="Tools\Flac\flac.exe" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\src\Wyspa.App\Tools\Flac\libFLAC.dll" Link="Tools\Flac\libFLAC.dll" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

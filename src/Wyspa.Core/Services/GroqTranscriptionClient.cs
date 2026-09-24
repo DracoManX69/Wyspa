@@ -16,14 +16,14 @@ public sealed class GroqTranscriptionClient : IGroqTranscriptionClient
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly HttpClient _httpClient;
 
-    public GroqTranscriptionClient(HttpClient httpClient)
+    public GroqTranscriptionClient(HttpClient httpClient, TimeSpan? timeout = null)
     {
         _httpClient = httpClient;
         if (_httpClient.BaseAddress is null)
         {
             _httpClient.BaseAddress = new Uri(BaseUrl);
         }
-        _httpClient.Timeout = TimeSpan.FromSeconds(60);
+        _httpClient.Timeout = timeout ?? TimeSpan.FromSeconds(60);
     }
 
     public async Task<ConnectionTestResult> TestConnectionAsync(string apiKey, CancellationToken cancellationToken)
@@ -72,14 +72,26 @@ public sealed class GroqTranscriptionClient : IGroqTranscriptionClient
             throw new FileNotFoundException("The recording could not be found.", audioFilePath);
         }
 
-        using var request = CreateTranscriptionRequest(apiKey, audioFilePath, options);
-        using var response = await SendWithRetryAsync(request, cancellationToken);
-        if (!response.IsSuccessStatusCode)
+        for (var attempt = 0; attempt < 3; attempt++)
         {
-            throw new InvalidOperationException(MapStatusToMessage(response.StatusCode));
+            // Reopen the stream for each retry; never buffer an entire file in RAM.
+            using var request = CreateTranscriptionRequest(apiKey, audioFilePath, options);
+            using var response = await _httpClient.SendAsync(request, cancellationToken);
+            if (attempt < 2 && (response.StatusCode is HttpStatusCode.RequestTimeout or (HttpStatusCode)429 ||
+                               response.StatusCode >= HttpStatusCode.InternalServerError))
+            {
+                var retryAfter = response.Headers.RetryAfter;
+                var delay = retryAfter?.Delta ?? (retryAfter?.Date - DateTimeOffset.UtcNow) ??
+                    TimeSpan.FromMilliseconds(500 * Math.Pow(2, attempt));
+                response.Dispose();
+                await Task.Delay(TimeSpan.FromSeconds(Math.Clamp(delay.TotalSeconds, 0.25, 60)), cancellationToken);
+                continue;
+            }
+            if (!response.IsSuccessStatusCode)
+                throw new InvalidOperationException(MapStatusToMessage(response.StatusCode));
+            return (await response.Content.ReadAsStringAsync(cancellationToken)).Trim();
         }
-
-        return (await response.Content.ReadAsStringAsync(cancellationToken)).Trim();
+        throw new InvalidOperationException("Groq did not return a response.");
     }
 
     public async Task<IntentResolution> InterpretIntentAsync(string apiKey, string transcript, string modelId, CancellationToken cancellationToken)
@@ -141,7 +153,15 @@ public sealed class GroqTranscriptionClient : IGroqTranscriptionClient
         }
 
         var fileContent = new StreamContent(File.OpenRead(audioFilePath));
-        fileContent.Headers.ContentType = new MediaTypeHeaderValue("audio/wav");
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue(Path.GetExtension(audioFilePath).ToLowerInvariant() switch
+        {
+            ".flac" => "audio/flac",
+            ".mp3" or ".mpga" => "audio/mpeg",
+            ".m4a" => "audio/mp4",
+            ".ogg" => "audio/ogg",
+            ".webm" => "audio/webm",
+            _ => "audio/wav"
+        });
         content.Add(fileContent, "file", Path.GetFileName(audioFilePath));
         request.Content = content;
         return request;
@@ -283,7 +303,8 @@ For insert, put the final text to type in "text" and action must be null.
     {
         HttpStatusCode.Unauthorized => "The Groq API key was rejected. Check that it was copied correctly.",
         HttpStatusCode.Forbidden => "This Groq key does not have access to the selected model.",
-        HttpStatusCode.RequestEntityTooLarge => "The recording is too large to upload. Try a shorter dictation.",
+        HttpStatusCode.RequestEntityTooLarge => "The audio is too large to upload. Choose a smaller file or a shorter dictation.",
+        HttpStatusCode.BadRequest or HttpStatusCode.UnsupportedMediaType => "Groq could not read this audio. Check that the file contains playable audio in a supported format.",
         (HttpStatusCode)429 => "Groq is rate limiting requests. Wait a moment and try again.",
         >= HttpStatusCode.InternalServerError => "Groq is having trouble right now. Try again shortly.",
         _ => "Groq could not transcribe the recording. Try again."
