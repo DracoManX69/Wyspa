@@ -14,6 +14,8 @@ public partial class StatusOverlayWindow : Window
     private readonly Border[] _bars;
     private DictationState _currentState;
     private readonly Queue<float> _levels = new();
+    private double _panelOpacity = .82;
+    private bool _isDarkMode;
 
     public StatusOverlayWindow()
     {
@@ -34,7 +36,14 @@ public partial class StatusOverlayWindow : Window
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
-        NativeWindowStyler.Apply(this, darkMode: false, transient: true);
+        NativeWindowStyler.Apply(this, _isDarkMode, transient: true);
+    }
+
+    public void ApplyTheme(bool darkMode)
+    {
+        _isDarkMode = darkMode;
+        SetPanelOpacity(_panelOpacity);
+        NativeWindowStyler.Apply(this, darkMode, transient: true);
     }
 
     public void SetStatus(string message, DictationState state)
@@ -66,7 +75,7 @@ public partial class StatusOverlayWindow : Window
         _currentState = DictationState.Inserted;
         ToggleStatusText.Text = isListening ? "Listening on" : "Listening off";
         ToggleStatusText.Visibility = Visibility.Visible;
-        StatusText.Text = "AutoCapture";
+        StatusText.Text = "SmartListen";
         var color = isListening
             ? MediaColor.FromRgb(56, 137, 89)
             : MediaColor.FromRgb(100, 112, 132);
@@ -118,10 +127,13 @@ public partial class StatusOverlayWindow : Window
     public void SetPanelOpacity(double opacity)
     {
         var normalized = Math.Clamp(opacity, 0.0, 1.0);
+        _panelOpacity = normalized;
         var backgroundAlpha = (byte)Math.Round(normalized * 255);
         var borderAlpha = (byte)Math.Round(normalized * 92);
-        Shell.Background = new SolidColorBrush(MediaColor.FromArgb(backgroundAlpha, 255, 255, 255));
-        Shell.BorderBrush = new SolidColorBrush(MediaColor.FromArgb(borderAlpha, 255, 255, 255));
+        var background = ((SolidColorBrush)FindResource("PanelBrush")).Color;
+        var border = ((SolidColorBrush)FindResource("LineBrush")).Color;
+        Shell.Background = new SolidColorBrush(MediaColor.FromArgb(backgroundAlpha, background.R, background.G, background.B));
+        Shell.BorderBrush = new SolidColorBrush(MediaColor.FromArgb(borderAlpha, border.R, border.G, border.B));
     }
 
     private void SetBarHeights(IReadOnlyList<double> heights)

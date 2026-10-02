@@ -2,7 +2,8 @@ param(
     [string]$Configuration = "Release",
     [string]$Output = "artifacts\publish\win-x64",
     [switch]$SelfContained,
-    [switch]$SingleFile
+    [switch]$SingleFile,
+    [switch]$SkipPublish
 )
 
 $ErrorActionPreference = "Stop"
@@ -83,10 +84,11 @@ function Set-AppHostRelativePath {
 
 foreach ($requiredTool in @("Tools\Video\yt-dlp.exe", "Tools\Video\ffmpeg.exe", "Tools\Video\deno.exe", "Tools\Speakers\segmentation.onnx", "Tools\Speakers\embedding.onnx")) {
     if (-not (Test-Path (Join-Path "src\Wyspa.App" $requiredTool))) {
-        throw "Missing v7 dependency: $requiredTool. Run python scripts/prepare-v7-tools.py before packaging."
+        throw "Missing bundled dependency: $requiredTool. Run python scripts/prepare-v7-tools.py before packaging."
     }
 }
 
+if (-not $SkipPublish) {
 dotnet publish .\src\Wyspa.App\Wyspa.App.csproj `
     --configuration $Configuration `
     --runtime win-x64 `
@@ -97,13 +99,19 @@ dotnet publish .\src\Wyspa.App\Wyspa.App.csproj `
 
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed." }
 
+}
+
 if (-not $SelfContained -and -not $SingleFile) {
-    $publishPath = Resolve-Path $Output
+    $publishPath = (Resolve-Path $Output).ProviderPath
     $exePath = Join-Path $publishPath "Wyspa.exe"
     $dataPath = Join-Path $publishPath "Data"
 
     if (-not (Test-Path $exePath)) {
         throw "Could not find Wyspa.exe in publish output."
+    }
+
+    if ((Test-Path $dataPath) -and -not (Test-Path (Join-Path $publishPath "Wyspa.dll"))) {
+        throw "Output is already packaged. Publish to a fresh directory before packaging again."
     }
 
     if (Test-Path $dataPath) {

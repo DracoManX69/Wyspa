@@ -2,14 +2,14 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:Wyspa.App">
-    <ScrollViewer Padding="10" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-        <StackPanel>
-            <TextBlock Text="Conversation notes" Style="{StaticResource SectionTitle}"/>
+    <ScrollViewer Padding="{StaticResource PagePadding}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel MaxWidth="1040" HorizontalAlignment="Stretch">
+            <TextBlock Text="Conversation" Style="{StaticResource PageTitle}"/>
             <TextBlock Text="Capture both sides. Keep the words, then find the key points." Style="{StaticResource BodyText}"/>
             <Border Style="{StaticResource Card}" Margin="0,10,0,6">
                 <StackPanel>
                     <TextBlock Text="{Binding CaptureDescription}" Foreground="{DynamicResource InkBrush}" FontWeight="SemiBold" TextWrapping="Wrap"/>
-                    <TextBlock Text="Change conversation type and capture sources in Settings → Conversation." Style="{StaticResource BodyText}"/>
+                    <Button Content="Conversation settings" Command="{x:Static local:AppNavigationCommands.OpenConversationSettings}" HorizontalAlignment="Left" ToolTip="Open conversation mode, call audio, and speaker settings" />
                     <WrapPanel Margin="0,7,0,0">
                         <Button Content="Start" Style="{StaticResource PrimaryButton}" Command="{Binding StartCommand}"/>
                         <Button Content="{Binding PauseText}" Command="{Binding PauseCommand}"/>

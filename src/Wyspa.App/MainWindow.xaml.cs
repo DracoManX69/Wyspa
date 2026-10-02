@@ -12,6 +12,13 @@ namespace Wyspa.App;
 
 public partial class MainWindow : Window
 {
+    public static readonly DependencyProperty IsCompactLayoutProperty = DependencyProperty.Register(
+        nameof(IsCompactLayout), typeof(bool), typeof(MainWindow), new PropertyMetadata(false));
+    public bool IsCompactLayout
+    {
+        get => (bool)GetValue(IsCompactLayoutProperty);
+        private set => SetValue(IsCompactLayoutProperty, value);
+    }
     private const string SavedApiKeyPlaceholder = "SavedApiKey";
     private const string SavedApiKeyDisplayText = "saved-api-key";
     private readonly DispatcherTimer _autoSaveTimer;
@@ -26,6 +33,8 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        IsCompactLayout = Width < 960;
+        SizeChanged += (_, _) => IsCompactLayout = ActualWidth < 960;
         _autoSaveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(120) };
         _autoSaveTimer.Tick += AutoSaveTimer_OnTick;
         Loaded += (_, _) =>
@@ -34,6 +43,12 @@ public partial class MainWindow : Window
             RefreshApiKeyBox();
         };
         DataContextChanged += MainWindow_OnDataContextChanged;
+        InputLevelMeter.IsVisibleChanged += (_, _) => QueueInputLevelPreviewUpdate();
+        SettingsScroll.ScrollChanged += (_, _) => QueueInputLevelPreviewUpdate();
+        IsVisibleChanged += (_, _) => QueueInputLevelPreviewUpdate();
+        StateChanged += (_, _) => QueueInputLevelPreviewUpdate();
+        Loaded += (_, _) => QueueInputLevelPreviewUpdate();
+        Closed += (_, _) => _observedViewModel?.SetInputLevelPreviewVisible(false);
         AddHandler(System.Windows.Controls.CheckBox.CheckedEvent, new RoutedEventHandler(AutoSaveControl_OnChanged), handledEventsToo: true);
         AddHandler(System.Windows.Controls.CheckBox.UncheckedEvent, new RoutedEventHandler(AutoSaveControl_OnChanged), handledEventsToo: true);
         AddHandler(System.Windows.Controls.ComboBox.SelectionChangedEvent, new System.Windows.Controls.SelectionChangedEventHandler(AutoSaveComboBox_OnSelectionChanged), handledEventsToo: true);
@@ -55,6 +70,37 @@ public partial class MainWindow : Window
     }
 
     private void OpenSettings_OnClick(object sender, RoutedEventArgs e) => SettingsTab.IsSelected = true;
+
+    private void OpenGroqSettings_OnExecuted(object sender, ExecutedRoutedEventArgs e) => OpenSettingsGroup(GroqSettingsGroup);
+    private void OpenAudioSettings_OnExecuted(object sender, ExecutedRoutedEventArgs e) => OpenSettingsGroup(AudioSettingsGroup);
+    private void OpenConversationSettings_OnExecuted(object sender, ExecutedRoutedEventArgs e) => OpenSettingsGroup(ConversationSettingsGroup);
+    private void OpenRepository_OnExecuted(object sender, ExecutedRoutedEventArgs e) =>
+        Process.Start(new ProcessStartInfo(AppNavigationCommands.RepositoryUri.AbsoluteUri) { UseShellExecute = true });
+
+    private void OpenSettingsGroup(System.Windows.Controls.Expander group)
+    {
+        SettingsTab.IsSelected = true;
+        group.IsExpanded = true;
+        Dispatcher.BeginInvoke(() =>
+        {
+            group.UpdateLayout();
+            group.BringIntoView(new Rect(0, 0, group.ActualWidth, 72));
+            if (group.Template.FindName("HeaderSite", group) is UIElement header) header.Focus();
+        }, DispatcherPriority.Loaded);
+    }
+
+    private void QueueInputLevelPreviewUpdate() => Dispatcher.BeginInvoke(UpdateInputLevelPreview, DispatcherPriority.Loaded);
+
+    private void UpdateInputLevelPreview()
+    {
+        var visible = IsLoaded && IsVisible && WindowState != WindowState.Minimized && InputLevelMeter.IsVisible;
+        if (visible)
+        {
+            var bounds = InputLevelMeter.TransformToAncestor(SettingsScroll).TransformBounds(new Rect(InputLevelMeter.RenderSize));
+            visible = bounds.IntersectsWith(new Rect(SettingsScroll.RenderSize));
+        }
+        _observedViewModel?.SetInputLevelPreviewVisible(visible);
+    }
 
     private async void SettingsContent_OnLoaded(object sender, RoutedEventArgs e)
     {
@@ -123,6 +169,7 @@ public partial class MainWindow : Window
     {
         if (_observedViewModel is not null)
         {
+            _observedViewModel.SetInputLevelPreviewVisible(false);
             _observedViewModel.PropertyChanged -= ViewModel_OnPropertyChanged;
         }
 
@@ -133,6 +180,7 @@ public partial class MainWindow : Window
         }
 
         RefreshApiKeyBox();
+        QueueInputLevelPreviewUpdate();
     }
 
     private void ViewModel_OnPropertyChanged(object? sender, PropertyChangedEventArgs e)

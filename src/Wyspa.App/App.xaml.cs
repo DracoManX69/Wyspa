@@ -98,6 +98,12 @@ public partial class App : System.Windows.Application
             _autoCaptureHotkeyService = new NativeHotkeyService();
             _levelMonitor = new NaudioLevelMonitorService();
             _themeService = new ThemeService(Resources);
+            _themeService.ThemeChanged += (_, dark) =>
+            {
+                _mainWindow?.ApplyTheme(dark);
+                _overlay?.ApplyTheme(dark);
+                if (_notesOverlay is not null) NativeWindowStyler.Apply(_notesOverlay, dark);
+            };
 
             var settingsService = new JsonSettingsService();
             var secretStore = new DpapiSecretStore();
@@ -107,7 +113,15 @@ public partial class App : System.Windows.Application
             var insertionService = new WindowsTextInsertionService();
             var keyboardCommandService = new WindowsKeyboardCommandService();
             var startupService = new WindowsStartupService(Environment.ProcessPath ?? Process.GetCurrentProcess().MainModule?.FileName ?? "Wyspa.exe");
-            var overlayService = new OverlayStatusService(() => _overlay ??= new StatusOverlayWindow());
+            var overlayService = new OverlayStatusService(() =>
+            {
+                if (_overlay is null)
+                {
+                    _overlay = new StatusOverlayWindow();
+                    _overlay.ApplyTheme(_themeService.IsDarkMode);
+                }
+                return _overlay;
+            });
             var wakeToneService = new WakeToneService();
             var autoCaptureToggleFeedbackService = new AutoCaptureToggleFeedbackService(overlayService);
             _mediaControlService = new WindowsAutoCaptureMediaControlService();
@@ -129,6 +143,19 @@ public partial class App : System.Windows.Application
                 new GroqTranscriptionClient(_fileHttpClient, TimeSpan.FromMinutes(10)),
                 secretStore, () => _viewModel.Settings);
             _autoCaptureService = new AutoCaptureService(settingsService, secretStore, _levelMonitor, _audioCapture, orchestrator, overlayService, wakeToneService);
+            _viewModel.InputLevelPreviewChanged += async (_, visible) =>
+            {
+                try
+                {
+                    await _autoCaptureService.SetLevelPreviewAsync(visible);
+                    _viewModel.InputLevelPreviewError = string.Empty;
+                }
+                catch (Exception ex)
+                {
+                    _viewModel.InputLevelPreviewError = "Input level unavailable. Check the selected input device and Windows microphone access.";
+                    CrashLogService.Log(ex);
+                }
+            };
             _trayService = new TrayService(_viewModel, startupService, ShowMainWindow, QuitAsync);
             overlayService.NotificationRequested += (_, message) => _trayService?.ShowNotification(message);
             _audioCapture.LevelAvailable += (_, level) => Dispatcher.BeginInvoke(() =>
@@ -138,7 +165,6 @@ public partial class App : System.Windows.Application
             });
             _levelMonitor.LevelAvailable += (_, level) => Dispatcher.BeginInvoke(() =>
             {
-                _viewModel?.UpdateMicrophoneLevel(level);
                 overlayService.UpdateLevel(level);
             });
             _hotkeyService.Pressed += async (_, _) => await _viewModel.HandleHotkeyPressedAsync();
@@ -149,6 +175,7 @@ public partial class App : System.Windows.Application
                 autoCaptureToggleFeedbackService.Show(isListening, _viewModel.Settings.OverlayOpacity);
 
             await _viewModel.InitializeAsync();
+            _themeService.ApplyPreference(_viewModel.Settings.Theme);
             await _autoCaptureService.RefreshAsync();
             _notesHttpClient = new HttpClient();
             _viewModel.Notes = new NotesViewModel(
@@ -220,10 +247,6 @@ public partial class App : System.Windows.Application
                 DataContext = _viewModel,
                 IsDarkMode = _themeService?.IsDarkMode ?? false
             };
-            if (_themeService is not null)
-            {
-                _themeService.ThemeChanged += (_, dark) => _mainWindow.ApplyTheme(dark);
-            }
             _mainWindow.Closing += (_, args) =>
             {
                 if (!_isQuitting)
@@ -248,11 +271,15 @@ public partial class App : System.Windows.Application
 
         try
         {
+            _themeService?.ApplyPreference(_viewModel.Settings.Theme);
             overlayService.SetOpacity(_viewModel.Settings.OverlayOpacity);
             await _autoCaptureService.ApplySettingsAsync(_viewModel.Settings, _viewModel.HasApiKey);
+            _viewModel.InputLevelPreviewError = string.Empty;
         }
         catch (Exception ex)
         {
+            if (_autoCaptureService.LevelPreviewEnabled)
+                _viewModel.InputLevelPreviewError = "Input level unavailable. Check the selected input device and Windows microphone access.";
             CrashLogService.Log(ex);
         }
     }
@@ -280,6 +307,7 @@ public partial class App : System.Windows.Application
             _notesOverlay.Closed += (_, _) => _notesOverlay = null;
         }
         _notesOverlay.Show();
+        NativeWindowStyler.Apply(_notesOverlay, _themeService?.IsDarkMode ?? false);
     }
 
     protected override async void OnExit(ExitEventArgs e)

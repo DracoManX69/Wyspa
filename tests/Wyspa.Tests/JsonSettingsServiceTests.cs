@@ -15,6 +15,7 @@ public sealed class JsonSettingsServiceTests
             FirstRunComplete = true,
             Language = "en",
             StartMinimized = true,
+            Theme = AppTheme.Dark,
             CopyInsertedTextToClipboard = true,
             GroqWritingCleanupEnabled = true,
             WritingCleanupModelId = "llama-3.1-8b-instant",
@@ -48,6 +49,7 @@ public sealed class JsonSettingsServiceTests
         Assert.True(loaded.FirstRunComplete);
         Assert.Equal("en", loaded.Language);
         Assert.True(loaded.StartMinimized);
+        Assert.Equal(AppTheme.Dark, loaded.Theme);
         Assert.True(loaded.CopyInsertedTextToClipboard);
         Assert.True(loaded.GroqWritingCleanupEnabled);
         Assert.Equal("llama-3.1-8b-instant", loaded.WritingCleanupModelId);
@@ -70,6 +72,17 @@ public sealed class JsonSettingsServiceTests
         Assert.Single(loaded.AutoCaptureWakeVoiceProfile.FeatureSets);
         Assert.Equal(4, loaded.AutoCaptureWakeVoiceProfile.VoiceTrainingSampleCount);
         Assert.Single(loaded.AutoCaptureWakeVoiceProfile.VoiceFeatureSets);
+    }
+
+    [Fact]
+    public async Task SettingsWithoutTheme_KeepSystemDefault()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "Wyspa.Tests", Guid.NewGuid().ToString("N"), "settings.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllTextAsync(path, """{"FirstRunComplete":true,"OverlayOpacity":0.45}""");
+        var settings = await new JsonSettingsService(path).LoadAsync(CancellationToken.None);
+        Assert.Equal(AppTheme.System, settings.Theme);
+        Assert.Equal(.45, settings.OverlayOpacity);
     }
 
     [Fact]

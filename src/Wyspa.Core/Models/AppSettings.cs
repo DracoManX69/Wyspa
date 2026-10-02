@@ -28,6 +28,7 @@ public sealed class AppSettings
     public bool HistoryEnabled { get; set; }
     public bool RetainAudioForDebugging { get; set; }
     public double OverlayOpacity { get; set; } = 0.82;
+    public AppTheme Theme { get; set; } = AppTheme.System;
     public float AutoCaptureThreshold { get; set; } = 0.08f;
     public int AutoCaptureSilenceMs { get; set; } = 1200;
     public int AutoCaptureMinSpeechMs { get; set; } = 650;

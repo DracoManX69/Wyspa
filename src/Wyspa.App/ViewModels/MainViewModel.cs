@@ -40,7 +40,7 @@ public sealed class MainViewModel : ViewModelBase
     private string _autoCaptureHotkeyText = HotkeySettings.DefaultAutoCapture.DisplayText;
     private string _scratchpadText = string.Empty;
     private string _scratchpadStatus = "Record a short clip to test Groq transcription without inserting text.";
-    private string _wakeVoiceStatus = "Record yourself saying hey whisper to gate AutoCapture locally.";
+    private string _wakeVoiceStatus = "Record yourself saying hey whisper to gate SmartListen locally.";
     private readonly WakeVoiceMatcher _wakeVoiceMatcher = new();
     private readonly List<float> _wakeVoiceSamples = [];
     private CancellationTokenSource? _wakeVoiceRecordingCts;
@@ -57,6 +57,8 @@ public sealed class MainViewModel : ViewModelBase
     private string _updateStatus = "Updates have not been checked.";
     private string? _updateUrl;
     private float _microphoneLevel;
+    private bool _isInputLevelPreviewVisible;
+    private string _inputLevelPreviewError = string.Empty;
     private DictationState _status = DictationState.Idle;
 
     public MainViewModel(
@@ -100,10 +102,25 @@ public sealed class MainViewModel : ViewModelBase
         OpenUpdateCommand = new RelayCommand(_ => OpenUpdate(), _ => IsUpdateAvailable && !string.IsNullOrWhiteSpace(UpdateUrl));
         _orchestrator.StateChanged += (_, state) => RunOnUi(() => Status = state);
         _audioCapture.LevelAvailable += (_, level) => UpdateMicrophoneLevel(level);
+        _levelMonitor.LevelAvailable += (_, level) => UpdateMicrophoneLevel(level);
         _levelMonitor.AudioAvailable += OnWakeVoiceAudioAvailable;
     }
 
     public event EventHandler? SettingsSaved;
+    public event EventHandler<bool>? InputLevelPreviewChanged;
+
+    public string InputLevelPreviewError
+    {
+        get => _inputLevelPreviewError;
+        set => SetProperty(ref _inputLevelPreviewError, value);
+    }
+
+    public void SetInputLevelPreviewVisible(bool visible)
+    {
+        if (_isInputLevelPreviewVisible == visible) return;
+        _isInputLevelPreviewVisible = visible;
+        InputLevelPreviewChanged?.Invoke(this, visible);
+    }
     public event EventHandler? SettingsChanged;
     public event EventHandler? AutoCaptureListeningChanged;
     public event EventHandler<bool>? AutoCaptureToggleFeedbackRequested;
@@ -410,7 +427,7 @@ public sealed class MainViewModel : ViewModelBase
         {
             Settings.AutoCaptureListeningEnabled = false;
             await ApplyAutoCaptureMediaBehaviorAsync(isListening: false, force: true);
-            await AutoSaveSettingsAsync("Add a Groq API key before enabling AutoCapture listening.");
+            await AutoSaveSettingsAsync("Add a Groq API key before enabling SmartListen listening.");
             return;
         }
 
@@ -428,8 +445,8 @@ public sealed class MainViewModel : ViewModelBase
         }
 
         ConnectionMessage = Settings.AutoCaptureListeningEnabled
-            ? "AutoCapture listening is on."
-            : "AutoCapture listening is off.";
+            ? "SmartListen listening is on."
+            : "SmartListen listening is off.";
         AutoCaptureToggleFeedbackRequested?.Invoke(this, Settings.AutoCaptureListeningEnabled);
         OnPropertyChanged(nameof(Settings));
         OnPropertyChanged(nameof(IsAutoCaptureMode));
@@ -443,7 +460,7 @@ public sealed class MainViewModel : ViewModelBase
     {
         if (Settings.ActivationMode is not ActivationMode.AutoCapture)
         {
-            ConnectionMessage = "Switch Input mode to AutoCapture before using the AutoCapture hotkey.";
+            ConnectionMessage = "Switch Input mode to SmartListen before using the SmartListen hotkey.";
             return;
         }
 
@@ -685,7 +702,7 @@ public sealed class MainViewModel : ViewModelBase
             await SaveSettingsCoreAsync(registerHotkey: false, updateMessage: false);
             AdvanceWakeTrainingPrompt();
             WakeVoiceStatus = $"Training saved locally. Next: {WakeTrainingPromptText}";
-            ConnectionMessage = "Wake training updated. AutoCapture now waits for the local match.";
+            ConnectionMessage = "Wake training updated. SmartListen now waits for the local match.";
             OnPropertyChanged(nameof(Settings));
             OnPropertyChanged(nameof(WakeTrainingText));
         }
@@ -706,7 +723,7 @@ public sealed class MainViewModel : ViewModelBase
             return;
         }
 
-        _levelMonitor.Stop();
+        if (!_isInputLevelPreviewVisible) _levelMonitor.Stop();
         _wakeVoiceStartedLevelMonitor = false;
     }
 
@@ -776,7 +793,7 @@ public sealed class MainViewModel : ViewModelBase
 
         if (HotkeysMatch(parsedHotkey, Settings.AutoCaptureHotkey))
         {
-            ConnectionMessage = "Choose a different shortcut for dictation and AutoCapture listening.";
+            ConnectionMessage = "Choose a different shortcut for dictation and SmartListen listening.";
             return;
         }
 
@@ -799,13 +816,13 @@ public sealed class MainViewModel : ViewModelBase
     {
         if (!HotkeyValidator.TryParse(AutoCaptureHotkeyText, out var parsedHotkey, out var hotkeyError))
         {
-            ConnectionMessage = hotkeyError ?? "Could not read AutoCapture hotkey.";
+            ConnectionMessage = hotkeyError ?? "Could not read SmartListen hotkey.";
             return;
         }
 
         if (HotkeysMatch(parsedHotkey, Settings.Hotkey))
         {
-            ConnectionMessage = "Choose a different shortcut for dictation and AutoCapture listening.";
+            ConnectionMessage = "Choose a different shortcut for dictation and SmartListen listening.";
             return;
         }
 
@@ -821,7 +838,7 @@ public sealed class MainViewModel : ViewModelBase
         }
 
         await SaveSettingsCoreAsync(registerHotkey: false, updateMessage: false);
-        ConnectionMessage = "AutoCapture hotkey saved.";
+        ConnectionMessage = "SmartListen hotkey saved.";
     }
 
     public void ApplyLiveSettings()
@@ -1032,7 +1049,7 @@ public sealed class MainViewModel : ViewModelBase
     {
         if (!_autoCaptureHotkeyService.TryRegister(Settings.AutoCaptureHotkey, out var error))
         {
-            ConnectionMessage = error ?? "Could not register AutoCapture hotkey.";
+            ConnectionMessage = error ?? "Could not register SmartListen hotkey.";
             return false;
         }
 

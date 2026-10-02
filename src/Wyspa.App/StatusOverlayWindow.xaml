@@ -57,7 +57,7 @@
                            VerticalAlignment="Center"
                            FontSize="17"
                            FontWeight="SemiBold"
-                           Foreground="#172025" />
+                           Foreground="{DynamicResource InkBrush}" />
             </Grid>
             <TextBlock x:Name="StatusText"
                        Grid.Row="1"
@@ -66,7 +66,7 @@
                        VerticalAlignment="Bottom"
                        FontSize="12"
                        FontWeight="SemiBold"
-                       Foreground="#172025" />
+                       Foreground="{DynamicResource InkBrush}" />
         </Grid>
     </Border>
 </Window>

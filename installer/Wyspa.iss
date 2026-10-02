@@ -1,13 +1,15 @@
 #define AppName "Wyspa"
-#define AppVersion "0.7.0"
-#define AppVersionInfo "0.7.0.0"
+#define AppVersion "0.8.0"
+#define AppVersionInfo "0.8.0.0"
 #define AppPublisher "Wyspa"
 #define AppExeName "Wyspa.exe"
+#ifndef PublishDir
 #define PublishDir "..\artifacts\publish\win-x64"
+#endif
 
 [Setup]
 AppId={{3E14E2A8-1A83-4D7E-A5F0-A4A67A1B4A7D}
-AppName={#AppName}
+AppName=WyspaFluent
 AppVersion={#AppVersion}
 AppPublisher={#AppPublisher}
 DefaultDirName={localappdata}\Programs\{#AppName}
@@ -18,7 +20,7 @@ OutputDir=..\artifacts\installer
 OutputBaseFilename=WyspaSetup-{#AppVersion}-win-x64
 SetupIconFile=..\src\Wyspa.App\Assets\AppIcon.ico
 UninstallDisplayIcon={app}\{#AppExeName}
-UninstallDisplayName={#AppName}
+UninstallDisplayName=WyspaFluent
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -41,8 +43,8 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "A
 Name: "startmenu"; Description: "Create a Start Menu shortcut"; GroupDescription: "Additional shortcuts:"; Flags: checkedonce
 
 [Files]
-Source: "{#PublishDir}\{#AppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#PublishDir}\Data\*"; DestDir: "{app}\Data"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#PublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "runtime-prerequisite.ps1"; Flags: dontcopy
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\{#AppExeName}"; Tasks: startmenu
@@ -53,50 +55,10 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; WorkingDir: "
 Filename: "{app}\{#AppExeName}"; Description: "Launch {#AppName}"; Flags: nowait postinstall skipifsilent unchecked
 
 [Code]
-const
-  DotNetDesktopRuntimeUrl = 'https://aka.ms/dotnet/10.0/windowsdesktop-runtime-win-x64.exe';
-  DotNetDesktopRuntimePage = 'https://dotnet.microsoft.com/download/dotnet/10.0';
+#include "RuntimePrerequisite.iss"
 
 var
   KeepWyspaData: Boolean;
-
-function HasDotNetDesktopRuntime10FromCommand(): Boolean;
-var
-  ResultCode: Integer;
-begin
-  Result :=
-    Exec(
-      ExpandConstant('{cmd}'),
-      '/C dotnet --list-runtimes 2>nul | findstr /C:"Microsoft.WindowsDesktop.App 10." >nul',
-      '',
-      SW_HIDE,
-      ewWaitUntilTerminated,
-      ResultCode) and (ResultCode = 0);
-end;
-
-function HasDotNetDesktopRuntime10FromRegistryRoot(RootKey: Integer): Boolean;
-var
-  Version: String;
-begin
-  Result := False;
-
-  if RegQueryStringValue(
-    RootKey,
-    'SOFTWARE\dotnet\Setup\InstalledVersions\x64\sharedfx\Microsoft.WindowsDesktop.App',
-    'Version',
-    Version) then
-  begin
-    Result := Pos('10.', Version) = 1;
-  end;
-end;
-
-function HasDotNetDesktopRuntime10(): Boolean;
-begin
-  Result :=
-    HasDotNetDesktopRuntime10FromCommand() or
-    HasDotNetDesktopRuntime10FromRegistryRoot(HKLM64) or
-    HasDotNetDesktopRuntime10FromRegistryRoot(HKCU64);
-end;
 
 function IsWyspaProcessRunning(): Boolean;
 var
@@ -142,49 +104,6 @@ begin
     SW_HIDE,
     ewWaitUntilTerminated,
     ResultCode);
-end;
-
-function InitializeSetup(): Boolean;
-var
-  ErrorCode: Integer;
-begin
-  Result := True;
-
-  if HasDotNetDesktopRuntime10() then
-  begin
-    exit;
-  end;
-
-  if WizardSilent() then
-  begin
-    MsgBox(
-      'Wyspa requires the Microsoft .NET 10 Desktop Runtime for Windows x64. Install it from ' +
-      DotNetDesktopRuntimePage + ', then run Wyspa Setup again.',
-      mbCriticalError,
-      MB_OK);
-    Result := False;
-    exit;
-  end;
-
-  if MsgBox(
-    'Wyspa requires the Microsoft .NET 10 Desktop Runtime for Windows x64.'#13#13 +
-    'Choose Yes to open the official Microsoft runtime installer. After it finishes, run Wyspa Setup again.'#13#13 +
-    'Choose No to open the .NET 10 download page instead.',
-    mbConfirmation,
-    MB_YESNO or MB_DEFBUTTON1) = IDYES then
-  begin
-    ShellExec('open', DotNetDesktopRuntimeUrl, '', '', SW_SHOWNORMAL, ewNoWait, ErrorCode);
-  end
-  else
-  begin
-    ShellExec('open', DotNetDesktopRuntimePage, '', '', SW_SHOWNORMAL, ewNoWait, ErrorCode);
-  end;
-
-  MsgBox(
-    'Install the .NET 10 Desktop Runtime, then run Wyspa Setup again.',
-    mbInformation,
-    MB_OK);
-  Result := False;
 end;
 
 function InitializeUninstall(): Boolean;

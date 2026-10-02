@@ -4,9 +4,9 @@
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanVisibility" />
     </UserControl.Resources>
-    <ScrollViewer Padding="8" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-        <StackPanel>
-            <TextBlock Text="Transcribe audio files" Style="{StaticResource SectionTitle}" />
+    <ScrollViewer Padding="{StaticResource PagePadding}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel MaxWidth="1040" HorizontalAlignment="Stretch">
+            <TextBlock Text="Audio Files" Style="{StaticResource PageTitle}" />
             <TextBlock Text="Transcribe local recordings with your saved Groq connection." Style="{StaticResource BodyText}" />
             <Border Style="{StaticResource Card}" Margin="0,8,0,7">
                 <StackPanel>

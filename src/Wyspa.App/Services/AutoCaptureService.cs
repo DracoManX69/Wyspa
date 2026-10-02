@@ -8,6 +8,7 @@ namespace Wyspa.App.Services;
 public sealed class AutoCaptureService : IDisposable
 {
     public bool Suspended { get; set; }
+    public bool LevelPreviewEnabled { get; private set; }
     private readonly ISettingsService _settingsService;
     private readonly ISecretStore _secretStore;
     private readonly IAudioLevelMonitorService _monitor;
@@ -69,22 +70,40 @@ public sealed class AutoCaptureService : IDisposable
         {
             SetSettings(settings, hasApiKey);
             _overlay.SetOpacity(settings.OverlayOpacity);
-            if (_audioCapture.IsRecording || !ShouldMonitorRun(settings, hasApiKey))
-            {
-                _monitor.Stop();
-                return;
-            }
-
-            if (!_monitor.IsRunning || !string.Equals(_monitorDeviceId, settings.MicrophoneDeviceId, StringComparison.Ordinal))
-            {
-                _monitor.Stop();
-                _monitorDeviceId = settings.MicrophoneDeviceId;
-                await _monitor.StartAsync(settings.MicrophoneDeviceId, cancellationToken);
-            }
+            await ApplyMonitorStateAsync(settings, hasApiKey, cancellationToken);
         }
         finally
         {
             _gate.Release();
+        }
+    }
+
+    // A visible threshold meter can use local levels without enabling speech-triggered
+    // capture, requiring a key, changing saved settings, or creating an audio file.
+    public async Task SetLevelPreviewAsync(bool enabled, CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            LevelPreviewEnabled = enabled;
+            await ApplyMonitorStateAsync(GetSettingsSnapshot(), _hasApiKey, cancellationToken);
+        }
+        finally { _gate.Release(); }
+    }
+
+    private async Task ApplyMonitorStateAsync(AppSettings settings, bool hasApiKey, CancellationToken cancellationToken)
+    {
+        if (_audioCapture.IsRecording || !ShouldMonitorRun(settings, hasApiKey))
+        {
+            _monitor.Stop();
+            return;
+        }
+
+        if (!_monitor.IsRunning || !string.Equals(_monitorDeviceId, settings.MicrophoneDeviceId, StringComparison.Ordinal))
+        {
+            _monitor.Stop();
+            _monitorDeviceId = settings.MicrophoneDeviceId;
+            await _monitor.StartAsync(settings.MicrophoneDeviceId, cancellationToken);
         }
     }
 
@@ -104,7 +123,7 @@ public sealed class AutoCaptureService : IDisposable
         _overlay.UpdateLevel(level);
         var settings = GetSettingsSnapshot();
         var now = DateTimeOffset.UtcNow;
-        if (settings.ActivationMode is not ActivationMode.AutoCapture ||
+        if (Suspended || settings.ActivationMode is not ActivationMode.AutoCapture ||
             !settings.AutoCaptureListeningEnabled ||
             !_hasApiKey ||
             _audioCapture.IsRecording ||
@@ -127,7 +146,7 @@ public sealed class AutoCaptureService : IDisposable
     private void OnMonitorAudio(object? sender, IReadOnlyList<float> samples)
     {
         var settings = GetSettingsSnapshot();
-        if (settings.ActivationMode is not ActivationMode.AutoCapture ||
+        if (Suspended || settings.ActivationMode is not ActivationMode.AutoCapture ||
             !settings.AutoCaptureListeningEnabled ||
             !settings.AutoCaptureWakeVoiceEnabled ||
             settings.AutoCaptureWakeVoiceProfile is null ||
@@ -296,9 +315,9 @@ public sealed class AutoCaptureService : IDisposable
     private bool ShouldMonitorRun(AppSettings settings) => ShouldMonitorRun(settings, _hasApiKey);
 
     private bool ShouldMonitorRun(AppSettings settings, bool hasApiKey) =>
-        !Suspended && hasApiKey &&
+        !Suspended && (LevelPreviewEnabled || (hasApiKey &&
         settings.ActivationMode is ActivationMode.AutoCapture &&
-        settings.AutoCaptureListeningEnabled;
+        settings.AutoCaptureListeningEnabled));
 
     private void RunOnAppDispatcher(Func<Task> action)
     {

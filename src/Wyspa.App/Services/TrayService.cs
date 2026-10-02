@@ -25,7 +25,7 @@ public sealed class TrayService : IDisposable
         _viewModel = viewModel;
         _quitAsync = quitAsync;
         _toggleItem = new ToolStripMenuItem("Start Listening");
-        _autoCaptureItem = new ToolStripMenuItem("AutoCapture listening") { CheckOnClick = false };
+        _autoCaptureItem = new ToolStripMenuItem("SmartListen listening") { CheckOnClick = false };
         _startupItem = new ToolStripMenuItem("Start with Windows") { CheckOnClick = true, Checked = startupService.IsEnabled() };
         _baseIcon = LoadAppIcon();
 
@@ -115,7 +115,7 @@ public sealed class TrayService : IDisposable
         _autoCaptureItem.Visible = isAutoMode;
         _autoCaptureItem.Enabled = _viewModel.CanListen;
         _autoCaptureItem.Checked = isAutoListening;
-        _autoCaptureItem.Text = isAutoListening ? "AutoCapture listening: On" : "AutoCapture listening: Off";
+        _autoCaptureItem.Text = isAutoListening ? "SmartListen listening: On" : "SmartListen listening: Off";
 
         _updatingStartupItem = true;
         _startupItem.Checked = _viewModel.StartWithWindows;
@@ -124,7 +124,7 @@ public sealed class TrayService : IDisposable
         var text = notesPaused ? "Wyspa - Notes paused" : isRecording
             ? "Wyspa - Recording"
             : isAutoListening
-                ? "Wyspa - AutoCapture listening"
+                ? "Wyspa - SmartListen listening"
                 : "Wyspa";
         _notifyIcon.Text = text.Length > 63 ? text[..63] : text;
         SetStatusIcon(isRecording, isAutoListening);

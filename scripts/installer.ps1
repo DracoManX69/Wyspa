@@ -31,4 +31,5 @@ if ([string]::IsNullOrWhiteSpace($InnoSetupCompiler) -or -not (Test-Path $InnoSe
     throw "Inno Setup 6 compiler was not found. Install it from https://jrsoftware.org/isdl.php or pass -InnoSetupCompiler C:\Path\To\ISCC.exe."
 }
 
-& $InnoSetupCompiler $InstallerScript
+& $InnoSetupCompiler "/DPublishDir=$((Resolve-Path $PublishOutput).ProviderPath)" $InstallerScript
+if ($LASTEXITCODE -ne 0) { throw "Inno Setup compilation failed." }

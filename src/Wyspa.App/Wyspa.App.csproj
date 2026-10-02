@@ -8,6 +8,7 @@
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
     <Win32Icon>Assets\AppIcon.ico</Win32Icon>
     <AssemblyName>Wyspa</AssemblyName>
+    <Product>WyspaFluent</Product>
     <RootNamespace>Wyspa.App</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
@@ -15,6 +16,7 @@
     <ProjectReference Include="..\Wyspa.Infrastructure\Wyspa.Infrastructure.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="Assets\Octicons-LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
     <Content Include="Tools\Flac\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
     <Content Include="Tools\Video\**\*;Tools\Speakers\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
     <Resource Include="Assets\AppIcon.ico" />

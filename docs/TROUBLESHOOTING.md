@@ -10,13 +10,14 @@ Wyspa and this troubleshooting guide were written and produced with AI assistanc
 
 Wyspa's lightweight installer requires Microsoft .NET 10 Desktop Runtime x64.
 
-If setup says .NET is missing:
+Setup downloads the latest stable compatible 10.0 Desktop Runtime x64 from Microsoft and installs it before continuing with Wyspa. Legacy .NET Framework, an x86 runtime, or the base .NET runtime without Windows Desktop components do not satisfy this requirement.
 
-1. Let the installer open the Microsoft runtime page or installer.
-2. Install the .NET 10 Desktop Runtime x64.
-3. Run `WyspaSetup-0.6.1-win-x64.exe` again.
-
-The Wyspa installer does not currently install .NET silently inside the wizard.
+- Allow the Windows administrator prompt for Microsoft's runtime installer. Wyspa itself remains per-user.
+- If a download fails or is cancelled, check the internet connection and click Install to retry.
+- If checksum or publisher verification fails, setup discards the download and does not execute it. Retry after checking connectivity and system date/time.
+- If the runtime installer requests a restart, restart Windows as prompted. If the runtime is still unavailable, run Wyspa Setup again afterward.
+- For a diagnostic log, launch `WyspaSetup-0.8.0-win-x64.exe /LOG="C:\path\wyspa-setup.log"`. Runtime errors are recorded in the setup log; Microsoft's own installation log is written to `desktop-runtime-install.log` inside the setup temporary directory while setup is open.
+- An offline machine must already have the x64 .NET 10 Desktop Runtime installed.
 
 ## Installer Does Not Finish
 
@@ -28,7 +29,7 @@ Try these steps:
 - install into the default per-user folder;
 - make sure Windows Defender or another security tool is not blocking the setup file.
 
-The installer does not require administrator privileges for the default per-user install.
+Wyspa does not require administrator privileges for the default per-user install. Installing a missing Microsoft runtime does require administrator approval.
 
 ## Uninstall Leaves Files Behind
 
@@ -79,7 +80,7 @@ Check:
 
 - Windows Settings > Privacy & security > Microphone;
 - microphone access for desktop apps;
-- the selected input device in Wyspa Settings > Audio & capture;
+- the selected input device in Wyspa Settings > Audio & Capture;
 - whether the Windows input meter moves while speaking;
 - whether another app has exclusive control of the microphone.
 
@@ -91,21 +92,21 @@ This usually means Groq received silence or the wrong microphone input.
 
 Try:
 
-- choose the correct microphone in Settings > Audio & capture;
+- choose the correct microphone in Settings > Audio & Capture;
 - speak while watching the input meter;
-- lower the AutoCapture threshold if using AutoCapture;
+- lower the SmartListen threshold if using SmartListen;
 - make sure Windows microphone permissions are enabled;
 - disable noise suppression in other audio tools if it is cutting off speech.
 
 Wyspa includes a silent-audio guard, but very quiet or misrouted recordings can still produce poor transcripts.
 
-## AutoCapture Starts And Stops Too Often
+## SmartListen Starts And Stops Too Often
 
-AutoCapture depends on microphone levels.
+SmartListen depends on microphone levels.
 
 Try:
 
-- raise the AutoCapture threshold if background noise triggers recording;
+- raise the SmartListen threshold if background noise triggers recording;
 - lower the threshold if speech is not detected;
 - increase silence duration if recording stops between words;
 - choose a specific microphone rather than Windows default;
@@ -128,14 +129,14 @@ If recording a shortcut fails:
 
 Combos such as `Ctrl+F4` should be supported.
 
-## AutoCapture Media Handling Does Not Affect Music
+## SmartListen Media Handling Does Not Affect Music
 
-Open Settings > Audio & capture and check AutoCapture Media Handling.
+Open Settings > Audio & Capture and check SmartListen Media Handling.
 
 Options:
 
 - Do Nothing leaves audio untouched.
-- Mute System Output mutes the default Windows output device while AutoCapture listening is on, then restores the previous mute state.
+- Mute System Output mutes the default Windows output device while SmartListen listening is on, then restores the previous mute state.
 - Pause or Resume Media sends the standard Windows play/pause media key when listening turns on and again when listening turns off.
 
 If play/pause does nothing, the current media app may not respond to Windows media keys. Try the mute option instead.
@@ -173,7 +174,7 @@ If this bothers you, switch to Type insertion mode.
 
 ## Overlay Is Too Visible Or Too Faint
 
-Open Settings > System and adjust Overlay Background Opacity.
+Open Settings > Look & Feel and adjust Overlay Background Opacity.
 
 - Lower values make the background more transparent.
 - Higher values make the overlay background more opaque.
@@ -226,4 +227,4 @@ This removes settings and the encrypted Groq API key, so you will need to add yo
 - **Stop takes too long:** use Cancel pending. Completed text stays saved and skipped passages get explicit markers.
 - **Cannot save notes:** keep the app open, resolve disk space or folder access, then select Save again. The notes folder contains both JSON and TXT copies.
 - **YouTube blocks a public video:** region restrictions, removed videos, and automated-download challenges can prevent extraction. Wyspa does not bypass login/challenges or use browser cookies. Use Audio Files for an audio file you already have.
-- **Speaker/video tools missing:** reinstall the complete v7 package. For development run `python scripts/prepare-v7-tools.py` before publishing.
+- **Speaker/video tools missing:** reinstall the complete Wyspa package. For development run `python scripts/prepare-v7-tools.py` before publishing.
