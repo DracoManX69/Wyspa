@@ -490,6 +490,7 @@ public sealed class MainViewModel : ViewModelBase
     private async Task ToggleScratchpadAsync()
     {
         if (NoteCaptureActive) { ScratchpadStatus = "Stop the notetaker session before using dictation."; return; }
+        if (_orchestrator.HasPendingStreamOutput) { ScratchpadStatus = "Wait for the current dictation to finish processing."; return; }
         if (IsScratchpadRecording)
         {
             await StopScratchpadAsync();
@@ -619,6 +620,7 @@ public sealed class MainViewModel : ViewModelBase
 
     private async Task StartWakeVoiceRecordingAsync()
     {
+        if (_orchestrator.HasPendingStreamOutput) { WakeVoiceStatus = "Wait for the current dictation to finish processing."; return; }
         if (_audioCapture.IsRecording)
         {
             WakeVoiceStatus = "Stop the current dictation before recording a wake phrase.";

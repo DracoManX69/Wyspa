@@ -299,6 +299,9 @@
                                                         <ComboBoxItem Content="Hold to Talk" Tag="{x:Static models:ActivationMode.HoldToTalk}" />
                                                         <ComboBoxItem Content="SmartListen" Tag="{x:Static models:ActivationMode.AutoCapture}" />
                                                     </ComboBox>
+                                                    <CheckBox Content="Stream Mode" AutomationProperties.Name="Stream Mode" IsChecked="{Binding Settings.StreamModeEnabled, UpdateSourceTrigger=PropertyChanged}" />
+                                                    <TextBlock Text="Show words as you speak in any listening mode. The clipboard keeps the full current dictation. Applies when the next recording starts." Style="{StaticResource BodyText}" Margin="0,0,0,4" />
+                                                    <TextBlock Text="Uses more Groq requests and audio allowance. Stream Mode types directly; spoken actions, spoken punctuation commands and Tone Re-write are bypassed." Style="{StaticResource BodyText}" Margin="0,0,0,8" />
                                                     <StackPanel Orientation="Horizontal">
                                                         <TextBlock Text="SmartListen Threshold" Style="{StaticResource FieldLabel}" />
                                                         <Border Style="{StaticResource HeaderHelpIcon}" ToolTip="SmartListen Threshold&#10;- Meter shows current microphone level.&#10;- Slider sets the trigger threshold from 0% to 100%.&#10;- Raise it if small noises start recording; lower it if speech is missed.">
@@ -486,9 +489,18 @@
                                         </StackPanel>
                                     </StackPanel>
                                 </Expander>
-                                <Expander Header="Experimental" Tag="Wake voice, tone re-write, and spoken actions" Uid="&#xE9D9;" Style="{StaticResource SettingsGroup}" IsExpanded="False" AutomationProperties.Name="Experimental settings">
+                                <Expander Header="Experimental" Tag="Stream fix, wake voice, tone re-write, and spoken actions" Uid="&#xE9D9;" Style="{StaticResource SettingsGroup}" IsExpanded="False" AutomationProperties.Name="Experimental settings">
                                     <StackPanel Margin="4,8,4,4">
-                                        <TextBlock Text="Wake voice, text re-writing, and spoken actions. Models use your Groq connection; refresh the list in Groq." Style="{StaticResource BodyText}" Margin="0,0,0,10" />
+                                        <TextBlock Text="Optional features to try. Models use your Groq connection; refresh the list in Groq." Style="{StaticResource BodyText}" Margin="0,0,0,10" />
+                                        <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+                                            <StackPanel>
+                                                <TextBlock Text="Stream Fix" Foreground="{DynamicResource InkBrush}" FontWeight="SemiBold" />
+                                                <CheckBox Content="Stream Fix" AutomationProperties.Name="Stream Fix" IsEnabled="{Binding Settings.StreamModeEnabled}" IsChecked="{Binding Settings.StreamFixEnabled, UpdateSourceTrigger=PropertyChanged}" />
+                                                <TextBlock Text="Requires Stream Mode in Capture &amp; Shortcuts. After dictation, checks punctuation, hesitations and simple grammar while keeping your wording. Changes apply to the next recording." Style="{StaticResource BodyText}" />
+                                                <TextBlock Text="Replaces only the passage Wyspa typed during this dictation. Existing text is never sent for cleanup. Leave the cursor and text untouched; if the editor cannot verify the passage, the finished version stays on the clipboard." Style="{StaticResource BodyText}" Margin="0,6,0,0" />
+                                                <TextBlock Text="Uses the Tone Re-write model selected below, with its own conservative proofreading rules. Adds a Groq text request; Tone Re-write does not need to be enabled." Style="{StaticResource BodyText}" Margin="0,6,0,0" />
+                                            </StackPanel>
+                                        </Border>
                                         <Border Style="{StaticResource Card}" Margin="0,0,0,12">
                                             <StackPanel>
                                                 <StackPanel Orientation="Horizontal">

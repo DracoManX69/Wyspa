@@ -7,6 +7,8 @@ public sealed class AppSettings
     public HotkeySettings Hotkey { get; set; } = HotkeySettings.Default;
     public HotkeySettings AutoCaptureHotkey { get; set; } = HotkeySettings.DefaultAutoCapture;
     public ActivationMode ActivationMode { get; set; } = ActivationMode.Toggle;
+    public bool StreamModeEnabled { get; set; }
+    public bool StreamFixEnabled { get; set; }
     public string ModelId { get; set; } = "whisper-large-v3-turbo";
     public string? Language { get; set; }
     public string? CustomPrompt { get; set; }
@@ -17,7 +19,7 @@ public sealed class AppSettings
     public bool CleanupEnabled { get; set; } = true;
     public bool SpokenPunctuationEnabled { get; set; } = true;
     public bool GroqWritingCleanupEnabled { get; set; }
-    public string WritingCleanupModelId { get; set; } = "llama-3.1-8b-instant";
+    public string WritingCleanupModelId { get; set; } = "openai/gpt-oss-20b";
     public WritingCleanupTone WritingCleanupTone { get; set; } = WritingCleanupTone.Casual;
     public string FormalRewritePrompt { get; set; } = WritingCleanupPromptDefaults.Formal;
     public string CasualRewritePrompt { get; set; } = WritingCleanupPromptDefaults.Casual;

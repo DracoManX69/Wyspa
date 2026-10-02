@@ -156,4 +156,10 @@ Publishing succeeded and the refinement preview was refreshed at `artifacts/Wysp
 
 ## Guidance for subsequent UI work
 
+v0.9 adds **Stream Mode** as an independent `SettingsToggle` in the existing Capture & Shortcuts subsection. It uses the shared on/off, focus, automation and autosave treatment; its supporting text wraps using `BodyText`. It does not add an activation-mode enum value or rename persisted settings. See `STREAM_MODE.md` for behavior and validation limits.
+
 Continue from this approved design system. Reuse the shared semantic palette, native Fluent controls, page geometry, Settings subsection treatment, and routed Settings shortcuts. Keep conversation and YouTube workflows separate and preserve persisted identifiers when changing display labels. Further changes to specialized dialogs, transcript layouts, or overlays should be scoped explicitly and checked against their existing behavior; these refinements do not establish complete acceptance of every app surface.
+
+### v0.9.1 Stream Fix and processing status
+
+Experimental remains the final group. Stream Fix uses the existing Card/SettingsToggle/BodyText resources and persists separately from Stream Mode. Its toggle is enabled only when Stream Mode is on; helper text explains conservative dictation-only proofreading, verified passage replacement across supported editors and clipboard fallback. The selected Tone Re-write model is shared without reusing its prompts. The recording overlay retains its state colors, adds a processing animation independent of microphone levels, and has room for a two-line processing/fallback message. Listening and Transcribing states never use the notification auto-hide timer.

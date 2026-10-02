@@ -15,6 +15,7 @@
     <Compile Include="..\..\src\Wyspa.App\ViewModels\GroqModelsViewModel.cs" Link="GroqModelsViewModel.cs" />
     <Compile Include="..\..\src\Wyspa.App\ViewModels\ViewModelBase.cs" Link="ViewModelBase.cs" />
     <Compile Include="..\..\src\Wyspa.App\ViewModels\AsyncRelayCommand.cs" Link="AsyncRelayCommand.cs" />
+    <Compile Include="..\..\src\Wyspa.App\Services\DictationOrchestrator.cs" Link="DictationOrchestrator.cs" />
     <Content Include="..\..\src\Wyspa.App\Tools\Flac\flac.exe" Link="Tools\Flac\flac.exe" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\src\Wyspa.App\Tools\Flac\libFLAC.dll" Link="Tools\Flac\libFLAC.dll" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

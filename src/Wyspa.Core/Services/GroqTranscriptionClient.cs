@@ -7,12 +7,12 @@ using Wyspa.Core.Models;
 
 namespace Wyspa.Core.Services;
 
-public sealed class GroqTranscriptionClient : IGroqTranscriptionClient
+public sealed class GroqTranscriptionClient : IGroqTranscriptionClient, IStreamProofreader
 {
     public const string BaseUrl = "https://api.groq.com/openai/v1/";
     public const string DefaultModel = "whisper-large-v3-turbo";
     public const string DefaultIntentModel = "llama-3.3-70b-versatile";
-    public const string DefaultCleanupModel = "llama-3.1-8b-instant";
+    public const string DefaultCleanupModel = "openai/gpt-oss-20b";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly HttpClient _httpClient;
 
@@ -176,6 +176,43 @@ public sealed class GroqTranscriptionClient : IGroqTranscriptionClient
         content.Add(fileContent, "file", Path.GetFileName(audioFilePath));
         request.Content = content;
         return request;
+    }
+
+    public async Task<StreamFixResult> ProofreadStreamAsync(string apiKey, string text, string model, CancellationToken token)
+    {
+        // Bound each proofreading request without truncating a long dictation.
+        // Split at a space and leave ambiguous edits across a boundary untouched.
+        var output = new StringBuilder();
+        var rejected = false;
+        for (var start = 0; start < text.Length;)
+        {
+            var end = Math.Min(text.Length, start + 3500);
+            if (end < text.Length)
+            {
+                var space = text.LastIndexOf(' ', end - 1, end - start);
+                if (space > start) end = space;
+            }
+            var part = text[start..end];
+            using var request = new HttpRequestMessage(HttpMethod.Post, "chat/completions");
+            AddAuth(request, apiKey);
+            request.Content = new StringContent(JsonSerializer.Serialize(new
+            {
+                model = string.IsNullOrWhiteSpace(model) ? DefaultCleanupModel : model,
+                temperature = 0, max_completion_tokens = 4096,
+                response_format = new { type = "json_object" },
+                messages = new[] { new { role = "system", content = StreamProofreading.Prompt }, new { role = "user", content = part } }
+            }, JsonOptions), Encoding.UTF8, "application/json");
+            using var response = await SendWithRetryAsync(request, token);
+            if (!response.IsSuccessStatusCode) throw new InvalidOperationException(response.StatusCode == HttpStatusCode.NotFound
+                ? "The selected Stream Fix text model is unavailable. Refresh the Groq model list and choose a current Tone Re-write model."
+                : "Stream Fix could not finish. " + MapStatusToMessage(response.StatusCode));
+            var result = StreamProofreading.Apply(part, ParseTextResponse(await response.Content.ReadAsStringAsync(token), "{}"));
+            output.Append(result.Text);
+            rejected |= result.RejectedEdits;
+            start = end;
+            while (start < text.Length && char.IsWhiteSpace(text[start])) output.Append(text[start++]);
+        }
+        return new(output.ToString(), rejected);
     }
 
     public static HttpRequestMessage CreateIntentRequest(string apiKey, string transcript, string modelId)

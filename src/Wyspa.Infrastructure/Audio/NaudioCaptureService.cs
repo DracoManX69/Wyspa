@@ -4,7 +4,7 @@ using Wyspa.Core.Models;
 
 namespace Wyspa.Infrastructure.Audio;
 
-public sealed class NaudioCaptureService : IAudioCaptureService
+public sealed class NaudioCaptureService : IAudioCaptureService, IStreamingAudioCaptureService, IPreRollAudioCaptureService
 {
     private WaveInEvent? _waveIn;
     private WaveFileWriter? _writer;
@@ -13,8 +13,12 @@ public sealed class NaudioCaptureService : IAudioCaptureService
     private readonly SemaphoreSlim _gate = new(1, 1);
     private long _bytesWritten;
     private float _peakLevel;
+    private TaskCompletionSource? _recordingStopped;
+    private byte[] _preRoll = [];
+    public void SetPreRoll(ReadOnlyMemory<byte> pcm) => _preRoll = pcm.ToArray();
 
     public event EventHandler<float>? LevelAvailable;
+    public event EventHandler<ReadOnlyMemory<byte>>? PcmAvailable;
     public bool IsRecording => _waveIn is not null;
 
     public Task<IReadOnlyList<AudioDeviceInfo>> GetDevicesAsync(CancellationToken cancellationToken)
@@ -55,8 +59,28 @@ public sealed class NaudioCaptureService : IAudioCaptureService
                 DeviceNumber = ParseDeviceNumber(deviceId)
             };
             _writer = new WaveFileWriter(_currentPath, _waveIn.WaveFormat);
+            if (_preRoll.Length > 0)
+            {
+                _writer.Write(_preRoll, 0, _preRoll.Length);
+                _bytesWritten = _preRoll.Length;
+                for (var i = 0; i + 1 < _preRoll.Length; i += 2)
+                    _peakLevel = Math.Max(_peakLevel, Math.Abs(BitConverter.ToInt16(_preRoll, i) / 32768f));
+                PcmAvailable?.Invoke(this, _preRoll);
+                _preRoll = [];
+            }
+            _recordingStopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            _waveIn.RecordingStopped += OnRecordingStopped;
             _waveIn.DataAvailable += OnDataAvailable;
-            _waveIn.StartRecording();
+            try { _waveIn.StartRecording(); }
+            catch
+            {
+                _waveIn.DataAvailable -= OnDataAvailable;
+                _waveIn.RecordingStopped -= OnRecordingStopped;
+                _waveIn.Dispose(); _writer.Dispose();
+                _waveIn = null; _writer = null;
+                File.Delete(_currentPath); _currentPath = null;
+                throw;
+            }
         }
         finally
         {
@@ -77,7 +101,10 @@ public sealed class NaudioCaptureService : IAudioCaptureService
             var path = _currentPath;
             var duration = DateTimeOffset.UtcNow - _startedAt;
             _waveIn.StopRecording();
+            // Drain the final callback before closing the WAV or ending a stream.
+            if (_recordingStopped is not null) await _recordingStopped.Task;
             _waveIn.DataAvailable -= OnDataAvailable;
+            _waveIn.RecordingStopped -= OnRecordingStopped;
             _waveIn.Dispose();
             _writer.Dispose();
             var bytesWritten = _bytesWritten;
@@ -132,6 +159,7 @@ public sealed class NaudioCaptureService : IAudioCaptureService
         _writer?.Write(args.Buffer, 0, args.BytesRecorded);
         _writer?.Flush();
         Interlocked.Add(ref _bytesWritten, args.BytesRecorded);
+        PcmAvailable?.Invoke(this, args.Buffer.AsMemory(0, args.BytesRecorded));
 
         var localPeak = 0f;
         for (var index = 0; index + 1 < args.BytesRecorded; index += 2)
@@ -150,5 +178,10 @@ public sealed class NaudioCaptureService : IAudioCaptureService
         }
 
         LevelAvailable?.Invoke(this, localPeak);
+    }
+
+    private void OnRecordingStopped(object? sender, StoppedEventArgs args)
+    {
+        _recordingStopped?.TrySetResult();
     }
 }

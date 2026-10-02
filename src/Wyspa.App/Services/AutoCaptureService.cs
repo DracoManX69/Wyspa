@@ -20,6 +20,7 @@ public sealed class AutoCaptureService : IDisposable
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly object _settingsLock = new();
     private readonly List<float> _wakeVoiceBuffer = [];
+    private readonly Queue<float> _preRoll = new();
     private readonly Dispatcher _dispatcher;
     private AppSettings _settings = new();
     private DateTimeOffset _lastVoiceAt;
@@ -53,6 +54,7 @@ public sealed class AutoCaptureService : IDisposable
         _monitor.AudioAvailable += OnMonitorAudio;
         _audioCapture.LevelAvailable += OnRecordingLevel;
         _orchestrator.ListeningStarting += OnListeningStarting;
+        _orchestrator.CaptureStopped += OnCaptureStopped;
         _orchestrator.StateChanged += OnOrchestratorStateChanged;
     }
 
@@ -113,6 +115,7 @@ public sealed class AutoCaptureService : IDisposable
         _monitor.AudioAvailable -= OnMonitorAudio;
         _audioCapture.LevelAvailable -= OnRecordingLevel;
         _orchestrator.ListeningStarting -= OnListeningStarting;
+        _orchestrator.CaptureStopped -= OnCaptureStopped;
         _orchestrator.StateChanged -= OnOrchestratorStateChanged;
         _monitor.Dispose();
         _gate.Dispose();
@@ -146,6 +149,16 @@ public sealed class AutoCaptureService : IDisposable
     private void OnMonitorAudio(object? sender, IReadOnlyList<float> samples)
     {
         var settings = GetSettingsSnapshot();
+        lock (_preRoll)
+        {
+            if (!Suspended && _hasApiKey && settings.ActivationMode is ActivationMode.AutoCapture &&
+                settings.AutoCaptureListeningEnabled && !_audioCapture.IsRecording)
+            {
+                foreach (var sample in samples) _preRoll.Enqueue(sample);
+                while (_preRoll.Count > 8000) _preRoll.Dequeue();
+            }
+            else _preRoll.Clear();
+        }
         if (Suspended || settings.ActivationMode is not ActivationMode.AutoCapture ||
             !settings.AutoCaptureListeningEnabled ||
             !settings.AutoCaptureWakeVoiceEnabled ||
@@ -201,7 +214,8 @@ public sealed class AutoCaptureService : IDisposable
             now - _lastVoiceAt >= TimeSpan.FromMilliseconds(settings.AutoCaptureSilenceMs) &&
             now - _recordingStartedAt >= TimeSpan.FromMilliseconds(settings.AutoCaptureMinSpeechMs))
         {
-            RunOnAppDispatcher(StopCaptureAsync);
+            var startedAt = _recordingStartedAt;
+            RunOnAppDispatcher(() => StopCaptureAsync(startedAt));
         }
     }
 
@@ -233,6 +247,19 @@ public sealed class AutoCaptureService : IDisposable
             _isStarting = true;
             _wakeVoiceAcceptedUntil = DateTimeOffset.MinValue;
             _monitor.Stop();
+            byte[] preRoll;
+            lock (_preRoll)
+            {
+                preRoll = new byte[_preRoll.Count * 2];
+                var index = 0;
+                foreach (var sample in _preRoll)
+                {
+                    System.Buffers.Binary.BinaryPrimitives.WriteInt16LittleEndian(preRoll.AsSpan(index, 2),
+                        (short)Math.Clamp((int)(sample * 32768), short.MinValue, short.MaxValue));
+                    index += 2;
+                }
+                _preRoll.Clear();
+            }
             if (settings.AutoCaptureWakeVoiceEnabled)
             {
                 _wakeTone.Play(settings);
@@ -240,7 +267,7 @@ public sealed class AutoCaptureService : IDisposable
 
             _recordingStartedAt = DateTimeOffset.UtcNow;
             _lastVoiceAt = _recordingStartedAt;
-            await _orchestrator.StartListeningAsync();
+            await _orchestrator.StartListeningAsync(preRoll: preRoll);
         }
         finally
         {
@@ -249,25 +276,33 @@ public sealed class AutoCaptureService : IDisposable
         }
     }
 
-    private async Task StopCaptureAsync()
+    private async Task StopCaptureAsync(DateTimeOffset startedAt)
     {
+        bool streaming;
         await _gate.WaitAsync();
         try
         {
-            if (!_audioCapture.IsRecording || _isStopping)
+            if (!_audioCapture.IsRecording || _isStopping || _recordingStartedAt != startedAt)
             {
                 return;
             }
 
             _isStopping = true;
+            streaming = _orchestrator.IsStreaming;
+        }
+        finally { _gate.Release(); }
+        try
+        {
             await _orchestrator.StopListeningAndTranscribeAsync();
-            _cooldownUntil = DateTimeOffset.UtcNow.AddMilliseconds(700);
-            await RestartMonitorIfNeededAsync();
+            if (!streaming)
+            {
+                _cooldownUntil = DateTimeOffset.UtcNow.AddMilliseconds(700);
+                await RestartMonitorIfNeededAsync();
+            }
         }
         finally
         {
-            _isStopping = false;
-            _gate.Release();
+            if (!streaming) _isStopping = false;
         }
     }
 
@@ -279,8 +314,9 @@ public sealed class AutoCaptureService : IDisposable
             return;
         }
 
-        await Task.Delay(200);
+        if (!settings.StreamModeEnabled) await Task.Delay(200);
         settings = GetSettingsSnapshot();
+        if (_audioCapture.IsRecording) return;
         if (!ShouldMonitorRun(settings))
         {
             _monitor.Stop();
@@ -297,6 +333,15 @@ public sealed class AutoCaptureService : IDisposable
     private void OnListeningStarting(object? sender, EventArgs e)
     {
         _monitor.Stop();
+        lock (_preRoll) _preRoll.Clear();
+    }
+
+    private void OnCaptureStopped(object? sender, EventArgs e)
+    {
+        _isStopping = false;
+        // Network processing continues independently; resume the local monitor
+        // now, without a network-length gap or a post-processing cooldown.
+        RunOnAppDispatcher(RestartMonitorIfNeededAsync);
     }
 
     private void OnOrchestratorStateChanged(object? sender, DictationState state)
@@ -412,6 +457,8 @@ public sealed class AutoCaptureService : IDisposable
         Hotkey = settings.Hotkey,
         AutoCaptureHotkey = settings.AutoCaptureHotkey,
         ActivationMode = settings.ActivationMode,
+        StreamModeEnabled = settings.StreamModeEnabled,
+        StreamFixEnabled = settings.StreamFixEnabled,
         ModelId = settings.ModelId,
         Language = settings.Language,
         CustomPrompt = settings.CustomPrompt,

@@ -167,9 +167,9 @@ public partial class App : System.Windows.Application
             {
                 overlayService.UpdateLevel(level);
             });
-            _hotkeyService.Pressed += async (_, _) => await _viewModel.HandleHotkeyPressedAsync();
-            _hotkeyService.Released += async (_, _) => await _viewModel.HandleHotkeyReleasedAsync();
-            _autoCaptureHotkeyService.Pressed += async (_, _) => await _viewModel.HandleAutoCaptureHotkeyPressedAsync();
+            _hotkeyService.Pressed += async (_, _) => { if (!_isQuitting) await _viewModel.HandleHotkeyPressedAsync(); };
+            _hotkeyService.Released += async (_, _) => { if (!_isQuitting) await _viewModel.HandleHotkeyReleasedAsync(); };
+            _autoCaptureHotkeyService.Pressed += async (_, _) => { if (!_isQuitting) await _viewModel.HandleAutoCaptureHotkeyPressedAsync(); };
             _viewModel.SettingsChanged += (_, _) => _ = ApplyLiveSettingsAsync(overlayService);
             _viewModel.AutoCaptureToggleFeedbackRequested += (_, isListening) =>
                 autoCaptureToggleFeedbackService.Show(isListening, _viewModel.Settings.OverlayOpacity);
@@ -288,6 +288,7 @@ public partial class App : System.Windows.Application
     {
         if (_isQuitting) return;
         _isQuitting = true;
+        if (_autoCaptureService is not null) _autoCaptureService.Suspended = true;
         if (_viewModel is not null)
         {
             await _viewModel.Notes.ShutdownAsync();

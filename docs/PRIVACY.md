@@ -33,7 +33,7 @@ Command intent is used for actions such as copy, paste, cut, select all, undo, r
 For Groq writing cleanup, if enabled, Wyspa sends:
 
 - the transcript text after basic local cleanup;
-- the selected writing cleanup model ID, normally `llama-3.1-8b-instant`;
+- the selected writing cleanup model ID, defaulting to `openai/gpt-oss-20b` for new settings;
 - the selected tone, Formal, Casual, or Technical;
 - the selected tone re-write prompt, which can be edited in settings.
 
@@ -158,3 +158,11 @@ Conversation and YouTube transcripts and summaries are automatically retained on
 Temporary audio is placed under `%TEMP%\Wyspa` and removed after its processing request finishes, including normal cancellation and failure. A force-kill, power failure, or filesystem failure may leave temporary files; they can be removed from that folder. These new modes never intentionally retain recordings, even if dictation audio debugging is enabled.
 
 The overlay indicates capture state; closing it does not stop the session. Pause stops both sources. Stop stops capture and finishes pending transcription; Cancel pending skips remaining requests and records gap markers. Quitting allows a short bounded finish period, then cancels remaining requests and saves gap markers.
+
+## Stream Mode and Stream Fix
+
+Activated Stream Mode sends overlapping microphone snapshots while recording and a complete final audio pass after recording stops. This repeats some audio and increases requests compared with ordinary dictation. Its temporary PCM spool is deleted after the session; the original recording follows the existing debug-retention preference.
+
+When experimental Stream Fix is enabled, Wyspa also sends only the current dictation transcript to the selected text cleanup model with a fixed proofreading instruction. Existing field text and previous clipboard contents are excluded from proofreading; only Wyspa's transcript for this session is cleaned. Text outside the dictated range stays local. Wyspa reads the focused field's text, caret and document identity locally to verify safe insertion/correction, and observes input/focus changes while it owns that insertion point. It does not retain a keystroke log or send surrounding document text to Groq.
+
+Stream Mode continually replaces the clipboard with the current dictation, then with the final transcript. It intentionally does not restore the previous clipboard. Unsupported or edited fields retain their live text and use the final clipboard for manual recovery.

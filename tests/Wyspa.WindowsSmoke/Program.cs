@@ -30,6 +30,11 @@ internal static class Program
         try
         {
             var output = Path.GetFullPath(args[1]); Directory.CreateDirectory(output);
+            if (args[0] == "stream-browser") return StreamFixBrowserSmoke.Run(output);
+            if (args[0] == "stream-word") return StreamFixWordSmoke.Run(output);
+            if (args[0] == "stream-insertion") return StreamingInsertionSmoke.Run(output);
+            if (args[0] == "stream-target") { StreamingInsertionSmoke.Target(output); return 0; }
+            if (args[0] == "stream-groq") { StreamingGroqSmoke.RunAsync(output, args[2]).GetAwaiter().GetResult(); return 0; }
             if (args[0] is "native" or "speakers") { NativeAsync(output, args[2], args[0] == "speakers").GetAwaiter().GetResult(); return 0; }
             if (args[0] == "video") { VideoAsync(output).GetAwaiter().GetResult(); return 0; }
             if (args[0] == "groq") { GroqAsync(output, args[2]).GetAwaiter().GetResult(); return 0; }
@@ -290,6 +295,47 @@ internal static class Program
                 provider.Toggle(); await Task.Delay(350);
                 if (toggle.IsChecked != original) throw new Exception("Toggle did not restore.");
                 system.IsExpanded = false;
+                var captureGroup = expanders.Single(e => (string)e.Header == "Audio & Capture");
+                captureGroup.IsExpanded = true;
+                var streamToggle = FindAll<CheckBox>(captureGroup).Single(c => (string)c.Content == "Stream Mode");
+                var streamPeer = new System.Windows.Automation.Peers.CheckBoxAutomationPeer(streamToggle);
+                var streamProvider = (System.Windows.Automation.Provider.IToggleProvider)streamPeer.GetPattern(System.Windows.Automation.Peers.PatternInterface.Toggle);
+                var modes = FindAll<ComboBox>(captureGroup).Single(c => System.Windows.Automation.AutomationProperties.GetName(c) == "Dictation activation mode");
+                foreach (var mode in Enum.GetValues<ActivationMode>())
+                {
+                    modes.SelectedValue = mode;
+                    streamProvider.Toggle(); await Task.Delay(350);
+                    var saved = await settingsService.LoadAsync(default);
+                    if (!saved.StreamModeEnabled || saved.ActivationMode != mode) throw new Exception("Stream Mode did not persist independently of activation mode.");
+                    streamProvider.Toggle(); await Task.Delay(350);
+                }
+                if ((await settingsService.LoadAsync(default)).StreamModeEnabled) throw new Exception("Stream Mode did not turn off.");
+                modes.SelectedValue = ActivationMode.Toggle;
+                var experimental = FindAll<Expander>(window).Single(e => e.Header?.ToString() == "Experimental");
+                experimental.IsExpanded = true;
+                var fixToggle = FindAll<CheckBox>(experimental).Single(c => c.Content?.ToString() == "Stream Fix");
+                await Idle(window);
+                if (fixToggle.IsEnabled) throw new Exception("Stream Fix must be disabled with Stream Mode off.");
+                streamToggle.IsChecked = true;
+                await Task.Delay(800); await Idle(window);
+                if (!fixToggle.IsEnabled) throw new Exception("Stream Fix did not enable with Stream Mode.");
+                fixToggle.IsChecked = true;
+                await Task.Delay(800);
+                if (!(await settingsService.LoadAsync(default)).StreamFixEnabled) throw new Exception("Stream Fix did not persist.");
+                ((FrameworkElement)fixToggle.Parent).BringIntoView(); await Idle(window); Save(window, Path.Combine(output, "stream-fix-light.png"));
+                theme.ApplyTheme(true); await Idle(window); Save(window, Path.Combine(output, "stream-fix-dark.png"));
+                window.Width = 560; window.Height = 600;
+                ((FrameworkElement)fixToggle.Parent).BringIntoView(); await Idle(window); Save(window, Path.Combine(output, "stream-fix-narrow.png"));
+                window.Width = 1180; window.Height = 860;
+                streamToggle.IsChecked = false; await Task.Delay(800);
+                if (fixToggle.IsEnabled || !(await settingsService.LoadAsync(default)).StreamFixEnabled) throw new Exception("Stream Mode should disable, but remember, Stream Fix preference.");
+                theme.ApplyTheme(false);
+                streamToggle.BringIntoView(); await Idle(window); Save(window, Path.Combine(output, "stream-mode-light.png"));
+                theme.ApplyTheme(true); await Idle(window); Save(window, Path.Combine(output, "stream-mode-dark.png"));
+                window.Width = 560; window.Height = 480;
+                streamToggle.BringIntoView(); await Idle(window); Save(window, Path.Combine(output, "stream-mode-narrow.png"));
+                window.Width = 1180; window.Height = 860;
+                captureGroup.IsExpanded = false;
                 Find<ScrollViewer>(content.Parent)?.ScrollToTop();
                 theme.ApplyTheme(false);
                 await Idle(window); Save(window, Path.Combine(output, "settings-light.png"));
@@ -341,6 +387,18 @@ internal static class Program
         SaveSurface((FrameworkElement)popup.Child, Path.Combine(output, "theme-dropdown.png"));
         selector.IsDropDownOpen = false;
         var status = new StatusOverlayWindow(); status.ApplyTheme(true); status.SetPanelOpacity(.45);
+        status.SetStatus("Transcribing", DictationState.Transcribing); status.ShowTransient();
+        await Task.Delay(2800);
+        if (!status.IsVisible) throw new Exception("Processing overlay disappeared while busy.");
+        var processingBar = (Border)status.FindName("Bar1"); var initialHeight = processingBar.Height;
+        await Task.Delay(160);
+        if (processingBar.Height == initialHeight) throw new Exception("Processing indicator did not animate.");
+        status.SetAutoCaptureToggleStatus(false); status.ShowTransient();
+        await Task.Delay(2300);
+        if (!status.IsVisible || ((TextBlock)status.FindName("StatusText")).Text != "Transcribing") throw new Exception("Toggle notification hid pending transcription.");
+        Save(status, Path.Combine(output, "stream-processing.png"));
+        status.Hide();
+
         status.Show(); await Idle(status); Save(status, Path.Combine(output, "status-overlay-dark.png"));
         var background = ((SolidColorBrush)((Border)status.FindName("Shell")).Background).Color;
         if (background.A != (byte)Math.Round(.45 * 255) || background.R != 43)

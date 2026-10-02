@@ -8,7 +8,23 @@ Wyspa is designed for people who want fast speech-to-text without a heavyweight 
 
 Wyspa was written effectively entirely by Codex with some cleaver interfacing with the app to get it to work pretty well. This vibe code disclosure is basically the only thing human authored. Codex did the rest of this repo too :)
 
-## New in v0.8
+## New in v0.9.1
+
+- **Experimental Stream Fix:** opt-in proofreading after a streaming dictation ends. Requires Stream Mode. Conservative edits preserve wording, names, numbers and meaning; broader rewrites are rejected.
+- **Dictation-only correction:** supported editors can replace the exact passage Wyspa streamed with its cleaned final version. Existing field text is excluded from cleanup. Cursor changes, edits or unavailable range information leave the field alone and keep the final version on the clipboard.
+- **Complete final audio pass:** brief pauses no longer finalize partial phrases. Final recognition uses the complete captured audio, and live updates prioritize accuracy over speed.
+- **Honest processing status:** the blue/teal animated overlay stays visible until recognition, proofreading and delivery finish. SmartListen can capture the next utterance while earlier output finishes in order.
+
+## Stream Mode
+
+- **Stream Mode:** a separate opt-in switch under Settings → Audio & Capture → Capture & Shortcuts. Works with Toggle, Hold to Talk, and SmartListen.
+- **Words during recording:** frequent overlapping Groq audio snapshots append words as recognition stabilizes, then flush the remaining words on Stop. The microphone keeps recording during requests.
+- **Stream Mode off:** transcription and cleanup finish before a single insertion, using the existing Paste/Type setting.
+- **Cumulative clipboard:** every delivered update replaces the clipboard with the whole current dictation; the next listening session starts a fresh transcript. Stream Mode inserts into the selected field and bypasses spoken actions, spoken punctuation commands, and Tone Re-write.
+
+Groq's Whisper API transcribes completed audio uploads. Stream Mode provides near-live updates using that API; it is not a native word-token stream. It uses more requests/audio allowance and depends on your connection and Groq rate limits. See [Stream Mode behavior and limits](docs/STREAM_MODE.md).
+
+## Introduced in v0.8
 
 - **WyspaFluent:** a Fluent-inspired interface with clearer sections, improved contrast, consistent controls, and a GitHub About link.
 - **Getting Started:** Home explains Groq account and API key setup; Conversation includes a shortcut to its settings.
@@ -154,7 +170,7 @@ Create the Windows installer:
 This produces:
 
 ```text
-artifacts\installer\WyspaSetup-0.8.0-win-x64.exe
+artifacts\installer\WyspaSetup-0.9.1-win-x64.exe
 ```
 
 ## Release Files
@@ -162,7 +178,7 @@ artifacts\installer\WyspaSetup-0.8.0-win-x64.exe
 For a GitHub release, upload the installer:
 
 ```text
-artifacts\installer\WyspaSetup-0.8.0-win-x64.exe
+artifacts\installer\WyspaSetup-0.9.1-win-x64.exe
 ```
 
 Optional secondary asset:

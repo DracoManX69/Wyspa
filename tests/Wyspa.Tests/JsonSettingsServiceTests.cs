@@ -16,6 +16,8 @@ public sealed class JsonSettingsServiceTests
             Language = "en",
             StartMinimized = true,
             Theme = AppTheme.Dark,
+            StreamModeEnabled = true,
+            StreamFixEnabled = true,
             CopyInsertedTextToClipboard = true,
             GroqWritingCleanupEnabled = true,
             WritingCleanupModelId = "llama-3.1-8b-instant",
@@ -50,6 +52,8 @@ public sealed class JsonSettingsServiceTests
         Assert.Equal("en", loaded.Language);
         Assert.True(loaded.StartMinimized);
         Assert.Equal(AppTheme.Dark, loaded.Theme);
+        Assert.True(loaded.StreamModeEnabled);
+        Assert.True(loaded.StreamFixEnabled);
         Assert.True(loaded.CopyInsertedTextToClipboard);
         Assert.True(loaded.GroqWritingCleanupEnabled);
         Assert.Equal("llama-3.1-8b-instant", loaded.WritingCleanupModelId);
@@ -82,6 +86,8 @@ public sealed class JsonSettingsServiceTests
         await File.WriteAllTextAsync(path, """{"FirstRunComplete":true,"OverlayOpacity":0.45}""");
         var settings = await new JsonSettingsService(path).LoadAsync(CancellationToken.None);
         Assert.Equal(AppTheme.System, settings.Theme);
+        Assert.False(settings.StreamModeEnabled);
+        Assert.False(settings.StreamFixEnabled);
         Assert.Equal(.45, settings.OverlayOpacity);
     }
 

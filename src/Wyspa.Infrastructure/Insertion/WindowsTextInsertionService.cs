@@ -4,7 +4,7 @@ using Wyspa.Core.Models;
 
 namespace Wyspa.Infrastructure.Insertion;
 
-public sealed class WindowsTextInsertionService : ITextInsertionService
+public sealed partial class WindowsTextInsertionService : ITextInsertionService, IStreamingTextInsertionService
 {
     public async Task<bool> InsertAsync(string text, InsertionMode mode, bool copyToClipboardOnSuccess, bool copyToClipboardOnFailure, CancellationToken cancellationToken)
     {

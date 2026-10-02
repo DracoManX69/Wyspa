@@ -11,6 +11,8 @@ namespace Wyspa.App;
 public partial class StatusOverlayWindow : Window
 {
     private readonly DispatcherTimer _timer;
+    private readonly DispatcherTimer _processingTimer;
+    private double _processingPhase;
     private readonly Border[] _bars;
     private DictationState _currentState;
     private readonly Queue<float> _levels = new();
@@ -26,10 +28,21 @@ public partial class StatusOverlayWindow : Window
         _timer.Tick += (_, _) =>
         {
             _timer.Stop();
-            if (IsVisible)
+            if (IsVisible && _currentState is not (DictationState.Listening or DictationState.Transcribing))
             {
                 Hide();
             }
+        };
+        _processingTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(80) };
+        _processingTimer.Tick += (_, _) =>
+        {
+            _processingPhase += .3;
+            SetBarHeights(Enumerable.Range(0, _bars.Length).Select(i => 7 + 14 * (.5 + .5 * Math.Sin(_processingPhase - i * .55))).ToArray());
+        };
+        IsVisibleChanged += (_, _) =>
+        {
+            if (IsVisible && _currentState == DictationState.Transcribing) _processingTimer.Start();
+            else _processingTimer.Stop();
         };
     }
 
@@ -49,6 +62,9 @@ public partial class StatusOverlayWindow : Window
     public void SetStatus(string message, DictationState state)
     {
         _currentState = state;
+        _timer.Stop();
+        if (state == DictationState.Transcribing && IsVisible) _processingTimer.Start();
+        else _processingTimer.Stop();
         ToggleStatusText.Visibility = Visibility.Collapsed;
         StatusText.Text = message;
         var color = state switch
@@ -72,6 +88,7 @@ public partial class StatusOverlayWindow : Window
 
     public void SetAutoCaptureToggleStatus(bool isListening)
     {
+        if (IsVisible && _currentState is DictationState.Listening or DictationState.Transcribing) return;
         _currentState = DictationState.Inserted;
         ToggleStatusText.Text = isListening ? "Listening on" : "Listening off";
         ToggleStatusText.Visibility = Visibility.Visible;
@@ -92,7 +109,7 @@ public partial class StatusOverlayWindow : Window
         Top = SystemParameters.WorkArea.Bottom - Height - 52;
         Show();
         _timer.Stop();
-        if (_currentState is not DictationState.Listening)
+        if (_currentState is not (DictationState.Listening or DictationState.Transcribing))
         {
             _timer.Start();
         }
@@ -100,7 +117,7 @@ public partial class StatusOverlayWindow : Window
 
     public void UpdateLevel(float level)
     {
-        if (!IsVisible || _currentState is not (DictationState.Listening or DictationState.Transcribing))
+        if (!IsVisible || _currentState is not DictationState.Listening)
         {
             return;
         }

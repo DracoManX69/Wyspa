@@ -72,8 +72,8 @@ public sealed class NaudioLevelMonitorService : IAudioLevelMonitorService
             peak = Math.Max(peak, Math.Abs(level));
         }
 
-        LevelAvailable?.Invoke(this, peak);
         AudioAvailable?.Invoke(this, samples);
+        LevelAvailable?.Invoke(this, peak);
     }
 
     private static int ParseDeviceNumber(string? deviceId)
