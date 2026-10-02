@@ -28,7 +28,7 @@
                         <TextBlock Text="Scratchpad" Style="{StaticResource SectionTitle}" />
                         <TextBlock Text="{Binding ScratchpadStatus}" Style="{StaticResource BodyText}" />
                     </StackPanel>
-                    <Button Grid.Column="1" Style="{StaticResource PrimaryButton}" Command="{Binding ScratchpadCommand}" VerticalAlignment="Top">
+                    <Button Grid.Column="1" Style="{StaticResource PrimaryButton}" Command="{Binding ScratchpadCommand}" VerticalAlignment="Top" ToolTip="Start or stop dictation into the scratchpad.">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Text="&#xE9A1;" Margin="0,0,7,0" />
                             <TextBlock Text="{Binding ScratchpadButtonText}" />
@@ -40,7 +40,7 @@
                          AcceptsReturn="True"
                          TextWrapping="Wrap"
                          VerticalScrollBarVisibility="Hidden"
-                         Margin="0,8,0,0" />
+                         Margin="0,8,0,0" ToolTip="Type or dictate into the scratchpad. Select text and press Ctrl+C to copy it." />
             </Grid>
         </Border>
     </Grid>

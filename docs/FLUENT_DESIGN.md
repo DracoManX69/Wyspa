@@ -6,7 +6,7 @@ The user approved the shared WPF theme, shell, and representative Settings scree
 
 ## Scope and references
 
-The direction follows the supplied references in `Redesign/01-layout.png` through `Redesign/04-lists.png`: a quiet navigation rail, clear title hierarchy, grouped settings rows with subtle subsection surfaces, restrained teal selection, and compact native controls. Settings has seven groups in this order: Groq, Conversation, Audio & Capture, Look & Feel, Privacy, System, and Experimental. Experimental stays last. The shell retains Home, Audio Files, Conversation, YouTube, and Settings as five distinct destinations.
+The direction follows the supplied references in `Redesign/01-layout.png` through `Redesign/04-lists.png`: a quiet navigation rail, clear title hierarchy, grouped settings rows with subtle subsection surfaces, restrained Windows-accent selection, and compact native controls. Settings has seven groups in this order: Groq, Conversation, Audio & Capture, Look & Feel, Privacy, System, and Experimental. Experimental stays last. The shell retains Home, Audio Files, Conversation, YouTube, and Settings as five distinct destinations.
 
 The visible window title and product name are `WyspaFluent`. The assembly and executable remain `Wyspa` and `Wyspa.exe` for compatibility with existing packaging, installation, and startup paths. Existing settings storage, Groq access, dictation and conversation workflows, and separate conversation/YouTube libraries remain in place. Refinements add routed navigation commands and an independently requested local input-level preview. Display-name changes preserve persisted identifiers and data formats: SmartListen continues to use `ActivationMode.AutoCapture`, `AutoCaptureService`, and the existing `AutoCapture*` properties internally.
 
@@ -25,25 +25,25 @@ Semantic resource names describe purpose, following the [Fluent design-token app
 | Resource | Light | Dark | Role |
 | --- | --- | --- | --- |
 | `AppBackgroundBrush` | `#EFEFEF` | `#1E1E1E` | Main page surface |
-| `ChromeBrush` | `#E9F0F2` | `#1A2023` | App header and navigation surface |
+| `ChromeBrush` | `#E9E9E9` | `#202020` | App header and navigation surface |
 | `PanelBrush` | `#FCFCFC` | `#2B2B2B` | Group and card surface |
 | `PanelAltBrush` | `#F4F4F4` | `#343434` | Alternate and hover surface |
 | `InputBrush` | `#FFFFFF` | `#242424` | App input-surface token |
 | `InkBrush` | `#171717` | `#F7F7F7` | Primary text |
 | `MutedBrush` | `#505050` | `#D1D1D1` | Secondary text and inactive toggle detail |
 | `LineBrush` | `#D1D1D1` | `#555555` | Dividers and surface borders |
-| `AccentBrush` | `#2B7A78` | `#5DD7CF` | Selection, active toggles, native accent roles |
-| `AccentDarkBrush` | `#19595A` | `#99E8E1` | Links and focused text-control borders |
-| `AccentSoftBrush` | `#E2EEEE` | `#293F40` | Selected navigation background |
-| `AccentTextBrush` | `#FFFFFF` | `#102120` | Text or thumb on accent fill |
+| `AccentBrush` | Windows accent | Windows accent | Selection, active toggles, native accent roles |
+| `AccentDarkBrush` | Contrast-adjusted accent | Contrast-adjusted accent | Links and focused text-control borders |
+| `AccentSoftBrush` | Accent tint on page surface | Accent tint on page surface | Selected navigation background |
+| `AccentTextBrush` | Black/white by contrast | Black/white by contrast | Text or thumb on accent fill |
 | `WarnBrush` | `#9D4C20` | `#FFBE90` | Warning text |
-| `SelectedTextBrush` | `#FFFFFF` | `#102120` | Selected-text foreground |
+| `SelectedTextBrush` | Black/white by contrast | Black/white by contrast | Selected-text foreground |
 
-The contrast refinement strengthens primary and secondary text, subtly deepens the page/navigation backgrounds, separates subsection surfaces, and makes shared borders/dividers more visible in both palettes. Fonts, spacing, teal accents, native interaction states, and Windows high-contrast precedence retain their existing treatment. Keep the XAML startup colors aligned with the light values applied by ThemeService.
+The contrast refinement strengthens primary and secondary text, subtly deepens the page/navigation backgrounds, separates subsection surfaces, and makes shared borders/dividers more visible in both palettes. Fonts, spacing, native interaction states, and Windows high-contrast precedence retain their existing treatment. ThemeService applies the Windows accent before the main window is shown.
 
-`LogoGradientBrush` remains a compatibility resource with a solid `#2B7A78` value in both modes. Despite its historical name, it is not a gradient.
+`LogoGradientBrush` remains a compatibility resource with a solid Windows-accent value. Despite its historical name, it is not a gradient. Raster branding assets are unchanged.
 
-`ThemeService` maps the app accent to the native Fluent accent-button backgrounds and borders, accent-fill roles, slider thumbs, progress foreground, and selected ComboBox indicator. Accent-button foreground uses `AccentTextBrush`. Hover and pressed button fills are explicitly differentiated: light `#256E6D` / `#205E5D`, dark `#81E1DB` / `#48BAB3`. Hyperlinks and focused text-control borders use `AccentDarkBrush`. Other native state resources continue to come from the Fluent theme.
+`ThemeService` maps the app accent to the native Fluent accent-button backgrounds and borders, accent-fill roles, slider thumbs, progress foreground, and selected ComboBox indicator. Accent-button foreground uses `AccentTextBrush`. Hover and pressed button fills are derived from the accent with 8% and 16% contrast-preserving blends. Hyperlinks and focused text-control borders use `AccentDarkBrush`. Other native state resources continue to come from the Fluent theme.
 
 In high contrast, surfaces use `SystemColors.WindowBrush`; text, dividers, and warnings use `WindowTextBrush`; active accents use `HighlightBrush`; accent text uses `HighlightTextBrush`; links use `HotTrackBrush`; and the soft selection surface uses `ControlBrush`. Native `ThemeMode.System` is used in that case. This mapping is implemented; visual high-contrast acceptance remains pending.
 
@@ -96,7 +96,7 @@ Use these exact visible names: **Audio & Capture**, **Input Device**, **SmartLis
 
 ### Theme and Overlay
 
-Look & Feel contains Theme and Overlay first, followed by the existing Basic Cleanup and Text Insertion subsections. The Theme dropdown offers **Dark**, **Light**, and **System**. Overlay was moved out of System, which now contains startup and update settings. Its existing opacity binding and autosave behavior are preserved.
+Look & Feel contains Theme, Windows notifications and Overlay first, followed by the existing Basic Cleanup and Text Insertion subsections. The Theme dropdown offers **Dark**, **Light**, and **System**. Overlay was moved out of System, which now contains startup and update settings. Its existing opacity binding and autosave behavior are preserved.
 
 `ThemeService.ApplyPreference` stores the active appearance choice; `RefreshTheme` resolves it when Windows settings change. Windows high contrast retains priority. App resources update existing controls immediately, and theme notifications refresh native main-window/conversation-overlay styling and the recording overlay. The recording overlay uses the selected palette for its panel and text while retaining its configured panel opacity. The System theme reader is injectable for deterministic native harness checks without changing the user's Windows preferences.
 
@@ -163,3 +163,21 @@ Continue from this approved design system. Reuse the shared semantic palette, na
 ### v0.9.1 Stream Fix and processing status
 
 Experimental remains the final group. Stream Fix uses the existing Card/SettingsToggle/BodyText resources and persists separately from Stream Mode. Its toggle is enabled only when Stream Mode is on; helper text explains conservative dictation-only proofreading, verified passage replacement across supported editors and clipboard fallback. The selected Tone Re-write model is shared without reusing its prompts. The recording overlay retains its state colors, adds a processing animation independent of microphone levels, and has room for a two-line processing/fallback message. Listening and Transcribing states never use the notification auto-hide timer.
+
+### v0.9.2 speech activity and completion
+
+The existing recorder overlay animates throughout active listening and processing. Captured speech takes priority over request state and uses the existing red (191,63,63); quiet listening/pending work uses the existing green (56,137,89). Activity decays after 250 ms without a voiced callback, and captured audio is tracked separately from idle microphone monitoring. Completed delivery hides the overlay before native observer and file cleanup; nonbusy notices retain their timeout but have no waveform bars.
+
+### v0.9.3 Windows appearance and notifications
+
+The Windows accent replaces the previously fixed teal palette. ThemeService reads `SystemColors.AccentColor`, maps it to selection, toggle and native accent roles, derives tinted selection surfaces and readable link shades, and chooses black/white accent foregrounds by contrast. Colour, desktop, visual-style and general Windows preference changes refresh resources on the UI dispatcher. Light/Dark/System preference and high-contrast precedence remain intact. The compatibility LogoGradientBrush follows the accent; raster branding assets are unchanged.
+
+The header has a one-unit bottom LineBrush border and the navigation rail a one-unit right border. Look & Feel adds Windows notifications, default On for compatibility, persisted as WindowsNotificationsEnabled. The central tray notification gate reads the current setting before every notification. Off suppresses all Wyspa Windows notifications; in-app feedback and the recorder overlay remain available.
+
+### v0.9.4 help and neutral chrome
+
+Header, navigation and scratchpad chrome use neutral greys (#E9E9E9 Light, #202020 Dark); theme/accent state still comes from Windows. The raster app icon keeps its branding. Status waveform colours retain their separate recording/processing meaning.
+
+All 27 previous question-mark Border adornments are now HelpButton controls. Each has a 24-unit transparent hit surface around a 16-unit glyph, a keyboard focus indicator, a descriptive automation name and nonempty HelpText. Empty/whitespace help collapses the icon. Hover, click, Enter and Space expose the same wrapped help. Escape, focus loss, clicking elsewhere, window deactivation, unloading or the 20-second timeout dismiss it. Built-in WPF tooltip service handles hover; the button adds explicit invocation and dismissal. See [WPF tooltip guidance](https://learn.microsoft.com/en-us/dotnet/desktop/wpf/controls/tooltip-overview).
+
+Control hints are concise explanations of behaviour, consequences and prerequisites. All authored settings inputs/actions have guidance, including disabled controls. Straightforward controls use a direct tooltip and existing inline description; question marks are retained for longer section/concept explanations rather than added to every row. Hints also cover the main actions in Audio Files, Conversation, YouTube, Scratchpad and the conversation overlay. Common timing is 400 ms initial delay, 100 ms between hints and 20 seconds to read; popups wrap within 380 units and use theme-aware neutral surfaces/text. Help icons use the same timing policy.

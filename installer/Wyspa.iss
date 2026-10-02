@@ -1,6 +1,6 @@
 #define AppName "Wyspa"
-#define AppVersion "0.9.1"
-#define AppVersionInfo "0.9.1.0"
+#define AppVersion "0.9.4"
+#define AppVersionInfo "0.9.4.0"
 #define AppPublisher "Wyspa"
 #define AppExeName "Wyspa.exe"
 #ifndef PublishDir

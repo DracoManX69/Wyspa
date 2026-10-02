@@ -15,7 +15,10 @@ public partial class StatusOverlayWindow : Window
     private double _processingPhase;
     private readonly Border[] _bars;
     private DictationState _currentState;
-    private readonly Queue<float> _levels = new();
+    private bool _captureActive;
+    private float _speechThreshold = .012f;
+    private float _level;
+    private long _lastSpeechAt = long.MinValue / 2;
     private double _panelOpacity = .82;
     private bool _isDarkMode;
 
@@ -36,12 +39,11 @@ public partial class StatusOverlayWindow : Window
         _processingTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(80) };
         _processingTimer.Tick += (_, _) =>
         {
-            _processingPhase += .3;
-            SetBarHeights(Enumerable.Range(0, _bars.Length).Select(i => 7 + 14 * (.5 + .5 * Math.Sin(_processingPhase - i * .55))).ToArray());
+            AnimateActivity();
         };
         IsVisibleChanged += (_, _) =>
         {
-            if (IsVisible && _currentState == DictationState.Transcribing) _processingTimer.Start();
+            if (IsVisible && _currentState is DictationState.Listening or DictationState.Transcribing) _processingTimer.Start();
             else _processingTimer.Stop();
         };
     }
@@ -63,14 +65,14 @@ public partial class StatusOverlayWindow : Window
     {
         _currentState = state;
         _timer.Stop();
-        if (state == DictationState.Transcribing && IsVisible) _processingTimer.Start();
+        if (state is DictationState.Listening or DictationState.Transcribing && IsVisible) _processingTimer.Start();
         else _processingTimer.Stop();
         ToggleStatusText.Visibility = Visibility.Collapsed;
         StatusText.Text = message;
         var color = state switch
         {
             DictationState.Listening => MediaColor.FromRgb(191, 63, 63),
-            DictationState.Transcribing => MediaColor.FromRgb(47, 111, 115),
+            DictationState.Transcribing => MediaColor.FromRgb(56, 137, 89),
             DictationState.Inserted => MediaColor.FromRgb(56, 137, 89),
             DictationState.Error => MediaColor.FromRgb(191, 96, 42),
             _ => MediaColor.FromRgb(100, 112, 132)
@@ -80,9 +82,10 @@ public partial class StatusOverlayWindow : Window
             bar.Background = new SolidColorBrush(color);
         }
 
+        if (state is DictationState.Listening or DictationState.Transcribing) AnimateActivity();
         if (state is not (DictationState.Listening or DictationState.Transcribing))
         {
-            SetBarHeights(Enumerable.Repeat(5d, _bars.Length).ToArray());
+            SetBarHeights(Enumerable.Repeat(0d, _bars.Length).ToArray());
         }
     }
 
@@ -115,30 +118,32 @@ public partial class StatusOverlayWindow : Window
         }
     }
 
+    public void SetCaptureActive(bool active, float speechThreshold = .012f)
+    {
+        _captureActive = active;
+        _speechThreshold = speechThreshold;
+        _level = 0;
+        _lastSpeechAt = long.MinValue / 2;
+        if (IsVisible) AnimateActivity();
+    }
+
     public void UpdateLevel(float level)
     {
-        if (!IsVisible || _currentState is not DictationState.Listening)
-        {
-            return;
-        }
+        if (!_captureActive) return;
+        _level = Math.Clamp(level, 0, 1);
+        if (_level >= _speechThreshold) _lastSpeechAt = Environment.TickCount64;
+    }
 
-        var normalized = Math.Clamp(level * 5.5f, 0.02f, 1f);
-        _levels.Enqueue(normalized);
-        while (_levels.Count > _bars.Length)
-        {
-            _levels.Dequeue();
-        }
-
-        var heights = new double[_bars.Length];
-        var values = _levels.ToArray();
-        var offset = _bars.Length - values.Length;
-        for (var index = 0; index < _bars.Length; index++)
-        {
-            var value = index < offset ? 0.02f : values[index - offset];
-            heights[index] = 4 + value * 24;
-        }
-
-        SetBarHeights(heights);
+    private void AnimateActivity()
+    {
+        if (_currentState is not (DictationState.Listening or DictationState.Transcribing)) return;
+        var speaking = _captureActive && Environment.TickCount64 - _lastSpeechAt < 250;
+        var color = speaking ? MediaColor.FromRgb(191, 63, 63) : MediaColor.FromRgb(56, 137, 89);
+        foreach (var bar in _bars)
+            if (bar.Background is not SolidColorBrush brush || brush.Color != color) bar.Background = new SolidColorBrush(color);
+        _processingPhase += .3;
+        var amplitude = speaking ? 6 + Math.Clamp(_level * 5.5, 0, 1) * 16 : 14;
+        SetBarHeights(Enumerable.Range(0, _bars.Length).Select(i => 5 + amplitude * (.5 + .5 * Math.Sin(_processingPhase - i * .55))).ToArray());
     }
 
     public void SetPanelOpacity(double opacity)

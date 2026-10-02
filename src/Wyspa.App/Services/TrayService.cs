@@ -11,6 +11,7 @@ namespace Wyspa.App.Services;
 public sealed class TrayService : IDisposable
 {
     private readonly MainViewModel _viewModel;
+    private readonly Action<string> _showNotification;
     private readonly Func<Task> _quitAsync;
     private readonly NotifyIcon _notifyIcon;
     private readonly ToolStripMenuItem _toggleItem;
@@ -20,9 +21,10 @@ public sealed class TrayService : IDisposable
     private Icon? _statusIcon;
     private bool _updatingStartupItem;
 
-    public TrayService(MainViewModel viewModel, IStartupService startupService, Action showMainWindow, Func<Task> quitAsync)
+    public TrayService(MainViewModel viewModel, IStartupService startupService, Action showMainWindow, Func<Task> quitAsync, Action<string>? showNotification = null)
     {
         _viewModel = viewModel;
+        _showNotification = showNotification ?? ShowBalloon;
         _quitAsync = quitAsync;
         _toggleItem = new ToolStripMenuItem("Start Listening");
         _autoCaptureItem = new ToolStripMenuItem("SmartListen listening") { CheckOnClick = false };
@@ -66,6 +68,12 @@ public sealed class TrayService : IDisposable
     }
 
     public void ShowNotification(string message)
+    {
+        if (!_viewModel.Settings.WindowsNotificationsEnabled) return;
+        _showNotification(message);
+    }
+
+    private void ShowBalloon(string message)
     {
         _notifyIcon.BalloonTipTitle = "Wyspa";
         _notifyIcon.BalloonTipText = message;

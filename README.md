@@ -8,12 +8,25 @@ Wyspa is designed for people who want fast speech-to-text without a heavyweight 
 
 Wyspa was written effectively entirely by Codex with some cleaver interfacing with the app to get it to work pretty well. This vibe code disclosure is basically the only thing human authored. Codex did the rest of this repo too :)
 
-## New in v0.9.1
+## New in v0.9.4
+
+- **Working help throughout Settings:** question marks support hover, click and keyboard activation, with consistent wrapped hints across the main workflows.
+- **Native Windows appearance:** neutral header/navigation surfaces, Windows accent colours and clearer shell borders.
+- **Optional Windows notifications:** turn all Wyspa Windows notifications on or off in Look & Feel.
+- **Automatic stream insertion:** live typing no longer requires editor text-range readback; the clipboard remains an automatic backup without a review-before-pasting step.
+
+### Streaming improvements included from v0.9.2
+
+- **Faster live feedback:** snapshot requests target a one-second start cadence, including request time, while retaining two-hypothesis agreement and the complete final audio pass.
+- **Speech-aware waveform:** continuously animated red bars during detected speech, including while requests run; animated green bars during silent listening/processing. Speech has a short 250 ms hold to avoid flickering between syllables.
+- **Prompt completion:** the waveform hides when delivery finishes, before native observer teardown and temporary-file cleanup. Recovery messages show without a lingering waveform.
+
+## Introduced in v0.9.1
 
 - **Experimental Stream Fix:** opt-in proofreading after a streaming dictation ends. Requires Stream Mode. Conservative edits preserve wording, names, numbers and meaning; broader rewrites are rejected.
 - **Dictation-only correction:** supported editors can replace the exact passage Wyspa streamed with its cleaned final version. Existing field text is excluded from cleanup. Cursor changes, edits or unavailable range information leave the field alone and keep the final version on the clipboard.
 - **Complete final audio pass:** brief pauses no longer finalize partial phrases. Final recognition uses the complete captured audio, and live updates prioritize accuracy over speed.
-- **Honest processing status:** the blue/teal animated overlay stays visible until recognition, proofreading and delivery finish. SmartListen can capture the next utterance while earlier output finishes in order.
+- **Honest processing status:** the animated overlay stays visible until recognition, proofreading and delivery finish. SmartListen can capture the next utterance while earlier output finishes in order.
 
 ## Stream Mode
 
@@ -243,3 +256,11 @@ WYSPA_FLAC_PATH=/usr/bin/flac dotnet test Wyspa.slnx --configuration Release
 ```
 
 The codec tests verify byte-identical PCM after compression and after splitting a file larger than the upload limit. Queue/network tests use fakes and require no API key.
+
+### v0.9.3 appearance and streaming refinement
+
+Look & Feel now includes a Windows notifications switch that silences all Wyspa Windows notifications when off. The app follows the Windows accent colour in Light, Dark and System, with subtle header/navigation borders. Stream Mode types into focused editable fields without requiring accessibility text readback and has no review-before-pasting step. Clipboard updates remain automatic backup; final Stream Fix replacement still requires a verified dictation range. See [Stream Mode](docs/STREAM_MODE.md).
+
+### v0.9.4 tester polish
+
+Settings help now works on hover, click and keyboard activation, with consistent wrapped tooltips across the main workflows. Empty help icons are hidden. Header/navigation surfaces are neutral grey in Light and Dark, while controls retain the Windows accent colour. The app icon keeps its original colours.

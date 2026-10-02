@@ -4,24 +4,24 @@
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
         <StackPanel>
             <TextBlock Text="Conversation" Style="{StaticResource SectionTitle}"/>
-            <WrapPanel><Button Content="Start" Command="{Binding StartCommand}" Style="{StaticResource PrimaryButton}"/><Button Content="{Binding PauseText}" Command="{Binding PauseCommand}"/><Button Content="Stop" Command="{Binding StopCommand}"/><Button Content="Summarise" Command="{Binding SummariseCommand}"/></WrapPanel>
+            <WrapPanel><Button Content="Start" Command="{Binding StartCommand}" Style="{StaticResource PrimaryButton}" ToolTip="Start recording a conversation using the configured microphone and capture sources." /><Button Content="{Binding PauseText}" Command="{Binding PauseCommand}" ToolTip="Pause or resume conversation recording without ending the session." /><Button Content="Stop" Command="{Binding StopCommand}" ToolTip="Finish recording. Pending transcription continues until captured audio has been processed." /><Button Content="Summarise" Command="{Binding SummariseCommand}" ToolTip="Send this transcript to the selected Groq summary model to generate a summary." /></WrapPanel>
             <TextBlock Text="{Binding Status}" Style="{StaticResource BodyText}" FontSize="11"/>
             <TextBlock Text="{Binding Error}" Foreground="{DynamicResource WarnBrush}" TextWrapping="Wrap" FontSize="11"/>
-            <Button Content="Cancel pending transcription" Command="{Binding CancelPendingCommand}" HorizontalAlignment="Left">
+            <Button Content="Cancel pending transcription" Command="{Binding CancelPendingCommand}" HorizontalAlignment="Left" ToolTip="Cancel outstanding conversation transcription requests. Already received text remains available.">
                 <Button.Style><Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Setter Property="Visibility" Value="Visible"/><Style.Triggers><Trigger Property="IsEnabled" Value="False"><Setter Property="Visibility" Value="Collapsed"/></Trigger></Style.Triggers></Style></Button.Style>
             </Button>
         </StackPanel>
         <DockPanel Grid.Row="1" Margin="0,7">
             <DockPanel.Style><Style TargetType="DockPanel"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding IsRoomNote}" Value="True"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></DockPanel.Style>
             <TextBlock Text="My room speaker" Style="{StaticResource BodyText}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-            <ComboBox ItemsSource="{Binding SpeakerChoices}" SelectedItem="{Binding MySpeaker}"/>
+            <ComboBox ToolTip="Choose which detected room speaker represents you." AutomationProperties.Name="My room speaker" ItemsSource="{Binding SpeakerChoices}" SelectedItem="{Binding MySpeaker}" />
         </DockPanel>
         <local:NotesTranscriptView Grid.Row="2"/>
         <StackPanel Grid.Row="3" Margin="0,6,0,0">
             <Expander Header="Summary" Foreground="{DynamicResource InkBrush}">
                 <StackPanel>
-                    <TextBox Text="{Binding Summary, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" MaxHeight="180" MinHeight="60" VerticalScrollBarVisibility="Auto"/>
-                    <Button Content="Cancel summary" Command="{Binding CancelSummaryCommand}" HorizontalAlignment="Left"/>
+                    <TextBox Text="{Binding Summary, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" MaxHeight="180" MinHeight="60" VerticalScrollBarVisibility="Auto" ToolTip="Read or select the generated summary. Use Ctrl+C to copy selected text." />
+                    <Button Content="Cancel summary" Command="{Binding CancelSummaryCommand}" HorizontalAlignment="Left" ToolTip="Cancel the current summary request without deleting the transcript." />
                 </StackPanel>
             </Expander>
             <TextBlock Text="Saved locally · closing this window keeps the session running. Use Stop to finish." Style="{StaticResource BodyText}" FontSize="10" Margin="0,6,0,0"/>

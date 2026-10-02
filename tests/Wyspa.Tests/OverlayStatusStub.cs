@@ -7,6 +7,8 @@ public sealed class OverlayStatusService
 {
     public string LastMessage { get; private set; } = "";
     public void SetOpacity(double opacity) { }
-    public void Show(string message, DictationState state) => LastMessage = message;
-    public void Hide() { }
+    public void Show(string message, DictationState state) { LastMessage = message; Hidden = false; }
+    public bool Hidden { get; private set; }
+    public void SetCaptureActive(bool active, float speechThreshold = .012f) { }
+    public void Hide() => Hidden = true;
 }

@@ -69,7 +69,14 @@ internal static class StreamingGroqSmoke
         {
             try
             {
-                while (true) { await Task.Delay(2200, live.Token); await session.ProcessAsync(false, live.Token); }
+                var delay = StreamingCadence.Interval;
+                while (true)
+                {
+                    await Task.Delay(delay, live.Token);
+                    var started = Stopwatch.GetTimestamp();
+                    await session.ProcessAsync(false, live.Token);
+                    delay = StreamingCadence.After(Stopwatch.GetElapsedTime(started));
+                }
             }
             catch (OperationCanceledException) when (live.IsCancellationRequested) { }
         }

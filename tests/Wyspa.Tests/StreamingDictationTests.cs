@@ -8,6 +8,27 @@ namespace Wyspa.Tests;
 public sealed class StreamingDictationTests
 {
     [Fact]
+    public async Task SubsecondSnapshots_StillRequireAgreement_AndDoNotReuploadUnchangedAudio()
+    {
+        var groq = new FakeGroq(); var updates = new List<(string Delta, string Full)>();
+        using var session = Session(groq, updates);
+        groq.Responses.Enqueue(Json("This is", 0, .3));
+        groq.Responses.Enqueue(Json("This is a test", 0, .3));
+        session.AddAudio(null, Pcm(.85)); await session.ProcessAsync(false, default);
+        Assert.Single(groq.Paths); Assert.Empty(updates);
+        await session.ProcessAsync(false, default);
+        Assert.Single(groq.Paths);
+        session.AddAudio(null, Pcm(.85)); await session.ProcessAsync(false, default);
+        Assert.Equal("This is", updates.Single().Full);
+    }
+
+    [Theory]
+    [InlineData(300, 700)]
+    [InlineData(1800, 100)]
+    public void Cadence_AccountsForRequestTime_WithoutBusyLoop(int requestMs, int delayMs) =>
+        Assert.Equal(TimeSpan.FromMilliseconds(delayMs), StreamingCadence.After(TimeSpan.FromMilliseconds(requestMs)));
+
+    [Fact]
     public void Agreement_HoldsUncertainTail_ThenAppendsFinalWordsWithoutReplaying()
     {
         var transcript = new StreamingTranscript();

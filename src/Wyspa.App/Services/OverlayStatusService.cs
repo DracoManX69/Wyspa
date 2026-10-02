@@ -41,6 +41,9 @@ public sealed class OverlayStatusService
         });
     }
 
+    public void SetCaptureActive(bool active, float speechThreshold = .012f) =>
+        RunOnUi(() => _windowFactory().SetCaptureActive(active, speechThreshold));
+
     public void UpdateLevel(float level)
     {
         RunOnUi(() =>

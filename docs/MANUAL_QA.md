@@ -63,3 +63,25 @@ Automated evidence for this build is recorded separately in `docs/V7_VALIDATION.
 - Under network delay/rate limit or proofreading failure, confirm the blue processing animation remains until work finishes or an error is shown. Toggle SmartListen off while processing and confirm the processing indicator remains.
 - With Stream Mode off, verify the field receives the finished transcript once and the remembered Stream Fix preference has no effect.
 - Test custom hotkeys, rich Word documents, high-DPI/multi-monitor placement and physical microphone devices. These require user acceptance beyond the automated fixture checks.
+
+## v0.9.2 responsiveness and waveform
+
+- Compare first visible words with the same spoken phrase and provider connection, with Stream Fix off. Check that names, repeated words, sentence endings and quiet speech remain accurate.
+- Speak during a slow request: the waveform must remain animated red. Pause: it should become animated green within about 250 ms while work continues. Resume speech during processing: red must take priority.
+- Test Toggle, Hold to Talk and SmartListen, including a new SmartListen recording while the previous one finishes.
+- After Stop, idle-monitor audio must not turn the processing waveform red. It must remain green through the final recognition and any proofreading/delivery, then disappear at completion.
+- Trigger clipboard fallback: show the recovery message without a lingering waveform. Validate silent periods and network failures do not leave a permanently busy overlay.
+
+## v0.9.3 follow-up
+
+- Look & Feel: turn Windows notifications off; trigger connection/transcription errors and verify no Wyspa Windows notification appears. Confirm the recorder/in-app messages remain. Restart and verify the preference persists; re-enable and verify delivery resumes.
+- Change Windows accent while Wyspa is open in Light, Dark and System; verify controls/navigation update and high contrast remains readable. Inspect the header and rail dividers at different DPI settings.
+- Stream into editors with and without accessible text ranges. Confirm live input needs no review/paste step. Click away mid-session and confirm new text stays on the clipboard without entering the new field; start a fresh session to use the new target.
+- With Stream Fix enabled, verify owned dictated passages can be corrected while existing document text stays intact. Unsupported/changed ranges should retain live output and the final clipboard backup without a review prompt.
+
+## v0.9.4 help and appearance
+
+- Hover each help icon, including its padding, and verify readable help appears. Click or tab to a question mark and press Enter/Space; dismiss with Escape or by moving focus. No empty question marks should appear.
+- Check hints on settings controls, including disabled Stream Fix and experimental controls. Important prerequisites should also remain in inline text; tips should wrap instead of extending beyond the window.
+- In Light, Dark and System, confirm the header/navigation have no fixed green tint. Windows accent still controls selection and primary controls; the app icon and semantic waveform colours remain distinct.
+- Check tooltip placement and keyboard focus at increased DPI, on multiple displays, and with a screen reader.

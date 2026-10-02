@@ -39,7 +39,7 @@ internal static class Program
             if (args[0] == "video") { VideoAsync(output).GetAwaiter().GetResult(); return 0; }
             if (args[0] == "groq") { GroqAsync(output, args[2]).GetAwaiter().GetResult(); return 0; }
             if (args[0] == "models") { ModelsAsync(output).GetAwaiter().GetResult(); return 0; }
-            Render(output, args[2], args[0] == "preview"); return 0;
+            Render(output, args[2], args[0] == "preview"); return Environment.ExitCode;
         }
         catch (Exception ex) { Console.Error.WriteLine(ex); return 1; }
     }
@@ -231,6 +231,7 @@ internal static class Program
                     throw new Exception("Unexpected settings group names or order.");
                 await VerifyLevelPreviewAndNavigation(window, tabs, main, autoCapture, monitor, audio, output, theme);
                 await VerifyThemeSettings(window, theme, settingsService, output, dark => systemDarkMode = dark);
+                await HelpHintsSmoke.VerifyAsync(window, output);
                 if (previewFailure is not null) throw new Exception("Level preview failed.", previewFailure);
                 expanders[0].IsExpanded = true; await Idle(window);
                 var modelBox = FindAll<ComboBox>(content).Single(c => System.Windows.Automation.AutomationProperties.GetName(c) == "Transcription model");
@@ -362,6 +363,42 @@ internal static class Program
         string output, Action<bool> setSystemDarkMode)
     {
         var group = (Expander)window.FindName("LookAndFeelSettingsGroup");
+        group.IsExpanded = true; await Idle(window);
+        group.BringIntoView(new Rect(0, 0, group.ActualWidth, 72)); await Idle(window);
+        var main = (MainViewModel)window.DataContext;
+        var toggle = (CheckBox)window.FindName("WindowsNotificationsToggle");
+        var delivered = new List<string>();
+        using (var tray = new TrayService(main, new FakeStartup(), () => { }, () => Task.CompletedTask, delivered.Add))
+        {
+            toggle.IsChecked = false; await Idle(window); await Task.Delay(350);
+            tray.ShowNotification("suppressed error"); tray.ShowNotification("suppressed success");
+            if (delivered.Count != 0 || (await settingsService.LoadAsync(default)).WindowsNotificationsEnabled)
+                throw new Exception("Notifications were not disabled and persisted.");
+            toggle.IsChecked = true; await Idle(window); await Task.Delay(350);
+            tray.ShowNotification("enabled");
+            if (delivered.Count != 1 || !(await settingsService.LoadAsync(default)).WindowsNotificationsEnabled)
+                throw new Exception("Notifications were not re-enabled and persisted.");
+        }
+        var accent = Colors.Purple;
+        using (var accentTheme = new ThemeService(Application.Current.Resources, () => false, () => accent))
+        {
+            foreach (var color in new[] { Colors.Purple, Colors.Goldenrod, Colors.DodgerBlue })
+            {
+                accent = color;
+                foreach (var dark in new[] { false, true })
+                {
+                    accentTheme.ApplyTheme(dark);
+                    var chrome = ((SolidColorBrush)Application.Current.Resources["ChromeBrush"]).Color;
+                    if (chrome.R != chrome.G || chrome.G != chrome.B) throw new Exception("Header/navigation chrome is tinted.");
+                    foreach (var key in new[] { "AccentBrush", "LogoGradientBrush", "AccentButtonBackground" })
+                        if (((SolidColorBrush)Application.Current.Resources[key]).Color != color)
+                            throw new Exception("Windows accent did not reach " + key);
+                }
+            }
+        }
+        theme.RefreshTheme();
+        if (((SolidColorBrush)Application.Current.Resources["AccentBrush"]).Color != SystemColors.AccentColor)
+            throw new Exception("Production theme did not read the Windows accent.");
         var selector = (ComboBox)window.FindName("ThemeSelector");
         var opacity = (Slider)window.FindName("OverlayOpacitySlider");
         group.IsExpanded = true; await Idle(window);
@@ -393,6 +430,19 @@ internal static class Program
         var processingBar = (Border)status.FindName("Bar1"); var initialHeight = processingBar.Height;
         await Task.Delay(160);
         if (processingBar.Height == initialHeight) throw new Exception("Processing indicator did not animate.");
+        if (((SolidColorBrush)processingBar.Background).Color != Color.FromRgb(56, 137, 89)) throw new Exception("Silent pending work must be green.");
+        status.SetCaptureActive(true);
+        status.UpdateLevel(.25f);
+        await Task.Delay(90);
+        if (((SolidColorBrush)processingBar.Background).Color != Color.FromRgb(191, 63, 63)) throw new Exception("Speech must override pending work with red.");
+        var speechHeight = processingBar.Height;
+        await Task.Delay(90);
+        if (processingBar.Height == speechHeight) throw new Exception("Speech animation froze between audio callbacks.");
+        Save(status, Path.Combine(output, "stream-speaking.png"));
+        status.UpdateLevel(0); await Task.Delay(350);
+        if (((SolidColorBrush)processingBar.Background).Color != Color.FromRgb(56, 137, 89)) throw new Exception("Speech expiry must restore green processing.");
+        status.SetCaptureActive(false); status.UpdateLevel(.9f); await Task.Delay(100);
+        if (((SolidColorBrush)processingBar.Background).Color != Color.FromRgb(56, 137, 89)) throw new Exception("Idle monitor audio must not mark completed capture red.");
         status.SetAutoCaptureToggleStatus(false); status.ShowTransient();
         await Task.Delay(2300);
         if (!status.IsVisible || ((TextBlock)status.FindName("StatusText")).Text != "Transcribing") throw new Exception("Toggle notification hid pending transcription.");

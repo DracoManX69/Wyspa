@@ -101,7 +101,7 @@ public sealed class StreamingOrchestratorTests
     }
 
     [Fact]
-    public async Task InsertionUnavailable_ContinuesClipboard_ReportsRecoverableState()
+    public async Task InsertionUnavailable_ContinuesClipboard_WithoutReviewStep()
     {
         var capture = new Capture(); var groq = new FakeGroq(); var insertion = new Insertion { CanType = false };
         groq.Responses.Enqueue(Json("Copied words"));
@@ -110,7 +110,7 @@ public sealed class StreamingOrchestratorTests
         await orchestrator.StopListeningAndTranscribeAsync();
         Assert.Equal("Copied words", insertion.Clipboard);
         Assert.Empty(insertion.Typed);
-        Assert.Equal(DictationState.Error, orchestrator.State);
+        Assert.Equal(DictationState.Inserted, orchestrator.State);
     }
 
     [Fact]
@@ -208,6 +208,43 @@ public sealed class StreamingOrchestratorTests
         capture.Emit(Pcm(2)); await orchestrator.StopIfNeededAsync();
     }
 
+    [Fact]
+    public async Task DeliveredStream_HidesBeforeNativeTeardownAndDiskCleanup()
+    {
+        var overlay = new OverlayStatusService();
+        var capture = new Capture(); var groq = new FakeGroq(); var insertion = new Insertion();
+        groq.Responses.Enqueue(Json("Finished dictation"));
+        var hiddenAtEnd = false; var hiddenAtDelete = false;
+        insertion.OnEnd = () => hiddenAtEnd = overlay.Hidden;
+        capture.OnDelete = () => hiddenAtDelete = overlay.Hidden;
+        var orchestrator = new DictationOrchestrator(new Settings { Value = new() { StreamModeEnabled = true } }, new Secrets(), capture, groq, new(), insertion, new Keys(), overlay);
+        await orchestrator.StartListeningAsync(); capture.Emit(Pcm(1));
+        await orchestrator.StopListeningAndTranscribeAsync();
+        Assert.True(overlay.Hidden);
+        Assert.Equal("Finished dictation", insertion.Typed);
+        Assert.True(hiddenAtEnd); Assert.True(hiddenAtDelete);
+    }
+
+    [Fact]
+    public async Task CleanupFailure_ReleasesOutputQueue_AndReportsFinishedInsteadOfProcessing()
+    {
+        var overlay = new OverlayStatusService();
+        var capture = new Capture { OnDelete = () => throw new IOException("File in use") };
+        var groq = new FakeGroq(); var insertion = new Insertion();
+        groq.Responses.Enqueue(Json("Finished dictation"));
+        groq.Responses.Enqueue(Json("Next dictation"));
+        var orchestrator = new DictationOrchestrator(new Settings { Value = new() { StreamModeEnabled = true } }, new Secrets(), capture, groq, new(), insertion, new Keys(), overlay);
+        await orchestrator.StartListeningAsync(); capture.Emit(Pcm(1));
+        await orchestrator.StopListeningAndTranscribeAsync();
+        Assert.False(orchestrator.HasPendingStreamOutput);
+        Assert.Equal(DictationState.Error, orchestrator.State);
+        Assert.Contains("Finished", overlay.LastMessage);
+        capture.OnDelete = null;
+        await orchestrator.StartListeningAsync(); capture.Emit(Pcm(1));
+        await orchestrator.StopListeningAndTranscribeAsync().WaitAsync(TimeSpan.FromSeconds(3));
+        Assert.Equal("Next dictation", insertion.Typed);
+    }
+
     private static async Task WaitFor(Func<bool> predicate)
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
@@ -235,6 +272,7 @@ public sealed class StreamingOrchestratorTests
         public event EventHandler<ReadOnlyMemory<byte>>? PcmAvailable { add { _pcm += value; Subscribers++; } remove { _pcm -= value; Subscribers--; } }
         public event EventHandler<float>? LevelAvailable { add { } remove { } }
         public int Subscribers, Stops, Deleted;
+        public Action? OnDelete;
         public bool FailStart;
         public string RecordingPath = "test.wav";
         public bool IsRecording { get; private set; }
@@ -244,7 +282,7 @@ public sealed class StreamingOrchestratorTests
         { if (FailStart) throw new InvalidOperationException("Microphone unavailable"); IsRecording = true; return Task.CompletedTask; }
         public Task<RecordingResult> StopRecordingAsync(CancellationToken token)
         { IsRecording = false; Stops++; return Task.FromResult(new RecordingResult(RecordingPath, TimeSpan.FromSeconds(4), 128000, .3f)); }
-        public Task DeleteRecordingAsync(string path, CancellationToken token) { Deleted++; return Task.CompletedTask; }
+        public Task DeleteRecordingAsync(string path, CancellationToken token) { OnDelete?.Invoke(); Deleted++; return Task.CompletedTask; }
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
     private sealed class Insertion : ITextInsertionService, IStreamingTextInsertionService
@@ -252,13 +290,14 @@ public sealed class StreamingOrchestratorTests
         public string Typed = "", Clipboard = "";
         public bool CanType = true;
         public bool CanCorrect;
+        public Action? OnEnd;
         public int Begins, Ends, NormalInserts;
         public bool AllowNormalInsert;
         public InsertionMode Mode;
         public List<string> Finals = [];
         public TaskCompletionSource FirstUpdate { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public void BeginStream(InsertionMode mode = InsertionMode.Paste) { Begins++; Mode = mode; Typed = ""; }
-        public void EndStream() => Ends++;
+        public void EndStream() { OnEnd?.Invoke(); Ends++; }
         public Task<bool> CompleteStreamAsync(string finalText, bool allowCorrection, CancellationToken token) { if (allowCorrection && CanType && CanCorrect) Typed = finalText; Clipboard = finalText; Finals.Add(finalText); return Task.FromResult(CanType && Typed == finalText); }
         public Task<bool> AppendStreamAsync(string delta, string text, CancellationToken token)
         { if (CanType) Typed += delta; Clipboard = text; FirstUpdate.TrySetResult(); return Task.FromResult(CanType); }

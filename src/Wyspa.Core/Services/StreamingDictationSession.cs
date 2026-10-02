@@ -68,7 +68,7 @@ public sealed class StreamingDictationSession : IDisposable
                     break;
                 }
                 if (!stopped && !window.Final && !window.AtLimit &&
-                    (window.End - _lastSnapshotEnd < StreamingAudioBuffer.SampleRate || window.Duration < 1)) break;
+                    (window.End - _lastSnapshotEnd < StreamingAudioBuffer.SampleRate * .8 || window.Duration < .8)) break;
 
                 var path = Path.Combine(Path.GetTempPath(), "Wyspa", $"stream-snapshot-{Guid.NewGuid():N}.wav");
                 try

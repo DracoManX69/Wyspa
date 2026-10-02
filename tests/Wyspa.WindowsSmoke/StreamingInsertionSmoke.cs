@@ -19,6 +19,11 @@ internal static class StreamingInsertionSmoke
             Process? target = null;
             var previous = Clipboard.GetDataObject();
             var insertion = new WindowsTextInsertionService();
+            void EndStream()
+            {
+                var timer = Stopwatch.StartNew(); insertion.EndStream();
+                File.AppendAllText(Path.Combine(output, "teardown-ms.txt"), timer.Elapsed.TotalMilliseconds.ToString("F1", System.Globalization.CultureInfo.InvariantCulture) + "\n");
+            }
             try
             {
                 var info = new ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false, CreateNoWindow = true };
@@ -59,10 +64,10 @@ internal static class StreamingInsertionSmoke
                 if (await insertion.AppendStreamAsync(" more", "Complete clipboard after focus change", default)) throw new Exception("Stream typed into a different field.");
                 await WaitFor(() => Clipboard.GetText() == "Complete clipboard after focus change");
                 if (File.ReadAllText(Path.Combine(output, "second.txt")) != "Other field") throw new Exception("Second field was modified.");
-                insertion.EndStream(); insertion.BeginStream();
+                EndStream(); insertion.BeginStream();
                 if (!await insertion.AppendStreamAsync(" New session", "New session", default)) throw new Exception("New stream did not accept selected field: " + insertion.StreamFallbackReason);
                 await WaitFor(() => File.ReadAllText(Path.Combine(output, "second.txt")) == "Other field New session");
-                insertion.EndStream();
+                EndStream();
                 foreach (var mode in new[] { InsertionMode.Paste, InsertionMode.Type })
                 {
                     const string prefix = "Already: um words | Before: ";
@@ -73,7 +78,7 @@ internal static class StreamingInsertionSmoke
                     if (!await insertion.CompleteStreamAsync("Words — café 日本語 😀.", true, default)) throw new Exception(mode + " correction failed: " + insertion.StreamFallbackReason);
                     await CheckText(output, prefix + "Words — café 日本語 😀." + suffix);
                     if (Clipboard.GetText() != "Words — café 日本語 😀.") throw new Exception("Final clipboard includes surrounding document text.");
-                    insertion.EndStream();
+                    EndStream();
                 }
                 await ResetFirst(output, "Before:  AFTER", 8);
                 insertion.BeginStream();
@@ -81,7 +86,7 @@ internal static class StreamingInsertionSmoke
                 if (!await insertion.CompleteStreamAsync("", true, default)) throw new Exception("Filler-only correction failed: " + insertion.StreamFallbackReason);
                 await CheckText(output, "Before:  AFTER");
                 if (Clipboard.ContainsText()) throw new Exception("Filler-only clipboard was not cleared.");
-                insertion.EndStream();
+                EndStream();
 
                 foreach (var editedText in new[] { "Edited: um words AFTER", "Before: um words CHANGED" })
                 {
@@ -91,16 +96,26 @@ internal static class StreamingInsertionSmoke
                     await ResetFirst(output, editedText, 16);
                     if (await insertion.CompleteStreamAsync("Words.", true, default)) throw new Exception("External context edit was overwritten.");
                     await CheckText(output, editedText);
-                    insertion.EndStream();
+                    EndStream();
                 }
                 await ResetFirst(output, "Before: selected AFTER", 8, 8);
                 insertion.BeginStream();
                 if (await insertion.AppendStreamAsync("new words", "new words", default)) throw new Exception("Initial selection was overwritten.");
                 await CheckText(output, "Before: selected AFTER");
-                insertion.EndStream();
+                EndStream();
+
+                await Focus(output, "opaque");
+                insertion.BeginStream();
+                if (!await insertion.AppendStreamAsync("Live words", "Live words", default))
+                    throw new Exception("Editor without TextPattern rejected live typing: " + insertion.StreamFallbackReason);
+                await WaitFor(() => File.ReadAllText(Path.Combine(output, "opaque.txt")) == "Live words");
+                if (!await insertion.CompleteStreamAsync("Live words", false, default))
+                    throw new Exception("Editor without TextPattern required a review step.");
+                await WaitFor(() => Clipboard.GetText() == "Live words");
+                EndStream();
 
                 await Focus(output, "password");
-                insertion.EndStream(); insertion.BeginStream();
+                EndStream(); insertion.BeginStream();
                 if (await insertion.AppendStreamAsync("secret-test", "secret-test", default)) throw new Exception("Stream typed into a password field.");
                 if (File.ReadAllText(Path.Combine(output, "password.txt")) != "0") throw new Exception("Password field changed.");
                 File.WriteAllText(Path.Combine(output, "result.txt"), "PASS: native Unicode insertion, cumulative clipboard, held Ctrl+Alt, Unicode/surrogates/special characters, existing text preservation, focus-change and caret-move clipboard fallback, verified generic final replacement using Paste and Type, repeated words outside the dictation, preserved prefix/suffix, filler-only deletion, external prefix/suffix edit rejection, existing-selection protection, session reset, and password-field guard.");
@@ -108,10 +123,14 @@ internal static class StreamingInsertionSmoke
             catch (Exception ex) { File.WriteAllText(Path.Combine(output, "error.txt"), ex.ToString()); exitCode = 1; }
             finally
             {
-                insertion.EndStream();
+                EndStream();
                 if (target is { HasExited: false }) { target.Kill(); await target.WaitForExitAsync(); }
                 target?.Dispose();
-                if (previous is not null) Clipboard.SetDataObject(previous, true); else Clipboard.Clear();
+                for (var attempt = 0; attempt < 20; attempt++)
+                {
+                    try { if (previous is not null) Clipboard.SetDataObject(previous, true); else Clipboard.Clear(); break; }
+                    catch (COMException) when (attempt < 19) { await Task.Delay(50); }
+                }
                 app.Shutdown();
             }
         };
@@ -119,22 +138,36 @@ internal static class StreamingInsertionSmoke
         return exitCode;
     }
 
+    private sealed class OpaqueTextBox : TextBox
+    {
+        protected override System.Windows.Automation.Peers.AutomationPeer OnCreateAutomationPeer() => new OpaquePeer(this);
+    }
+    private sealed class OpaquePeer(OpaqueTextBox owner) : System.Windows.Automation.Peers.TextBoxAutomationPeer(owner)
+    {
+        public override object? GetPattern(System.Windows.Automation.Peers.PatternInterface patternInterface) =>
+            patternInterface is System.Windows.Automation.Peers.PatternInterface.Text ? null : base.GetPattern(patternInterface);
+    }
+
     public static void Target(string output)
     {
         var app = new Application();
         var first = new TextBox { Text = "Existing: ", AcceptsReturn = true, FontSize = 22, Margin = new Thickness(10) };
         var second = new TextBox { Text = "Other field", FontSize = 22, Margin = new Thickness(10) };
+        var opaque = new OpaqueTextBox { FontSize = 22, Margin = new Thickness(10) };
         var password = new PasswordBox { Margin = new Thickness(10) };
-        var stack = new StackPanel(); stack.Children.Add(first); stack.Children.Add(second); stack.Children.Add(password);
+        var stack = new StackPanel(); stack.Children.Add(first); stack.Children.Add(second); stack.Children.Add(password); stack.Children.Add(opaque);
         var window = new Window { Title = "Wyspa Stream Mode isolated insertion test", Width = 850, Height = 260, Content = stack };
         var lastFirst = first.Text; var lastSecond = second.Text; var lastPassword = 0;
         var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
         timer.Tick += (_, _) =>
         {
+            try
+            {
             // Do not put synchronous file I/O in the target's per-character input path.
-            if (first.Text != lastFirst) { lastFirst = first.Text; File.WriteAllText(Path.Combine(output, "first.txt"), lastFirst); }
-            if (second.Text != lastSecond) { lastSecond = second.Text; File.WriteAllText(Path.Combine(output, "second.txt"), lastSecond); }
-            if (password.Password.Length != lastPassword) { lastPassword = password.Password.Length; File.WriteAllText(Path.Combine(output, "password.txt"), lastPassword.ToString()); }
+            if (first.Text != lastFirst) { File.WriteAllText(Path.Combine(output, "first.txt"), first.Text); lastFirst = first.Text; }
+            if (second.Text != lastSecond) { File.WriteAllText(Path.Combine(output, "second.txt"), second.Text); lastSecond = second.Text; }
+            if (password.Password.Length != lastPassword) { File.WriteAllText(Path.Combine(output, "password.txt"), password.Password.Length.ToString()); lastPassword = password.Password.Length; }
+            File.WriteAllText(Path.Combine(output, "opaque.txt"), opaque.Text);
             var reset = Path.Combine(output, "reset.json");
             if (File.Exists(reset))
             {
@@ -146,9 +179,12 @@ internal static class StreamingInsertionSmoke
             if (!File.Exists(command)) return;
             var which = File.ReadAllText(command);
             if (which == "second") { second.Focus(); second.CaretIndex = second.Text.Length; }
+            else if (which == "opaque") opaque.Focus();
             else password.Focus();
             File.Delete(command);
             File.WriteAllText(Path.Combine(output, "focused-" + which), "yes");
+            }
+            catch (IOException) { /* Parent may briefly hold a result file while polling. Retry next tick. */ }
         };
         window.Loaded += (_, _) =>
         {

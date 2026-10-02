@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Wyspa.Core.Abstractions;
 using Wyspa.Core.Models;
 using Wyspa.Core.Services;
@@ -132,6 +133,7 @@ public sealed class DictationOrchestrator
         Exception? captureError = null;
         try { path = (await _audioCapture.StopRecordingAsync(CancellationToken.None)).FilePath; }
         catch (Exception ex) { captureError = ex; }
+        _overlay.SetCaptureActive(false);
         ((IStreamingAudioCaptureService)_audioCapture).PcmAvailable -= run.Session.AddAudio;
         _stream = null;
         CaptureStopped?.Invoke(this, EventArgs.Empty);
@@ -171,6 +173,7 @@ public sealed class DictationOrchestrator
             }
             if (_audioCapture is IPreRollAudioCaptureService bufferedCapture) bufferedCapture.SetPreRoll(preRoll);
             await _audioCapture.StartRecordingAsync(settings.MicrophoneDeviceId, cancellationToken);
+            _overlay.SetCaptureActive(true, settings.ActivationMode == ActivationMode.AutoCapture ? Math.Max(.012f, settings.AutoCaptureThreshold * .65f) : .012f);
             SetState(DictationState.Listening, _stream is null ? "Listening" : "Streaming");
             if (_stream is { } activeRun) activeRun.Worker = RunStreamAsync(activeRun);
         }
@@ -210,13 +213,16 @@ public sealed class DictationOrchestrator
         try
         {
             await BeginOutputAsync(run, token);
+            var delay = StreamingCadence.Interval;
             while (true)
             {
-                await Task.Delay(2200, token);
+                await Task.Delay(delay, token);
+                var started = Stopwatch.GetTimestamp();
                 run.Busy = true;
                 RefreshStreamStatus();
                 try { await run.Session.ProcessAsync(stopped: false, token); }
                 finally { run.Busy = false; RefreshStreamStatus(); }
+                delay = StreamingCadence.After(Stopwatch.GetElapsedTime(started));
             }
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
@@ -254,37 +260,38 @@ public sealed class DictationOrchestrator
             if (!string.IsNullOrEmpty(run.Session.Text))
             {
                 _overlay.Show("Transcribing · delivering text", DictationState.Transcribing);
-                var applied = await ((IStreamingTextInsertionService)_textInsertion).CompleteStreamAsync(finalText, run.Settings.StreamFixEnabled, token);
-                if (!applied) notice = "Final text copied · review before pasting";
+                // Clipboard fallback is a normal backup, not a review or approval step.
+                await ((IStreamingTextInsertionService)_textInsertion).CompleteStreamAsync(finalText, run.Settings.StreamFixEnabled, token);
             }
         }
         catch (OperationCanceledException) { notice = "Cancelled · completed words on clipboard"; }
         catch (Exception ex) { notice = $"Stream incomplete: {ex.Message}"; }
         finally
         {
-            try
-            {
-                if (path is not null && !run.Settings.RetainAudioForDebugging)
-                    await _audioCapture.DeleteRecordingAsync(path, CancellationToken.None);
-            }
-            catch { notice ??= "Finished · temporary audio cleanup failed"; }
+            // Delivery is finished. UIA unsubscription and file deletion can block;
+            // neither should leave a completed dictation looking like a request.
+            _pendingStreams--; _finalizingStreams--;
+            if (_pendingStreams > 0) RefreshStreamStatus();
+            else if (notice is not null) SetState(DictationState.Error, notice);
+            else CompleteAndHide();
             try
             {
                 if (run.Begun) ((IStreamingTextInsertionService)_textInsertion).EndStream();
-                run.Session.Dispose();
+                if (path is not null && !run.Settings.RetainAudioForDebugging)
+                    await _audioCapture.DeleteRecordingAsync(path, CancellationToken.None);
             }
-            catch { notice ??= "Finished · temporary stream cleanup failed"; }
+            catch
+            {
+                if (_pendingStreams == 0) SetState(DictationState.Error, "Finished · temporary audio cleanup failed");
+            }
             finally
             {
-                run.Cancellation.Dispose();
-                _pendingStreams--; _finalizingStreams--;
-                try
+                try { run.Session.Dispose(); }
+                catch
                 {
-                    if (_pendingStreams > 0) RefreshStreamStatus();
-                    else if (notice is not null) SetState(DictationState.Error, notice);
-                    else CompleteAndHide();
+                    if (_pendingStreams == 0) SetState(DictationState.Error, "Finished · temporary stream cleanup failed");
                 }
-                finally { run.Completed.TrySetResult(); }
+                finally { run.Cancellation.Dispose(); run.Completed.TrySetResult(); }
             }
         }
     }
@@ -307,6 +314,7 @@ public sealed class DictationOrchestrator
         {
             SetState(DictationState.Transcribing, "Transcribing");
             var recording = await _audioCapture.StopRecordingAsync(cancellationToken);
+            _overlay.SetCaptureActive(false);
             recordingPath = recording.FilePath;
             if (recording.LooksSilent)
             {

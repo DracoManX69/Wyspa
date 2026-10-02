@@ -9,6 +9,8 @@ namespace Wyspa.Infrastructure.Insertion;
 public sealed partial class WindowsTextInsertionService
 {
     private int[]? _streamTarget;
+    private string? _selectionMismatch;
+    private bool _streamCanCorrect;
     private volatile bool _streamPaused;
     private string _streamTyped = "", _streamPrefix = "", _streamSuffix = "";
     private StreamInputGuard? _streamGuard;
@@ -21,6 +23,7 @@ public sealed partial class WindowsTextInsertionService
         EndStream();
         _streamInsertionMode = mode;
         _streamPaused = false;
+        _streamCanCorrect = false;
         StreamFallbackReason = null;
         _streamTyped = _streamPrefix = _streamSuffix = "";
     }
@@ -29,7 +32,7 @@ public sealed partial class WindowsTextInsertionService
     {
         if (_focusHandler is not null)
         {
-            try { Automation.RemoveAutomationFocusChangedEventHandler(_focusHandler); } catch { }
+            AutomationEventThread.Remove(_focusHandler);
             _focusHandler = null;
         }
         _streamGuard?.Dispose(); _streamGuard = null;
@@ -50,11 +53,13 @@ public sealed partial class WindowsTextInsertionService
             var identity = focused.GetRuntimeId();
             if (_streamTarget is null)
             {
-                // Establish ownership only at the first insertion, with a collapsed
-                // selection. Never replace a user's pre-existing selection.
-                var snapshot = ReadSelection(focused);
-                if (snapshot is null) return PauseStream("Caret unavailable or existing text selected");
-                (_streamPrefix, _streamSuffix) = snapshot.Value;
+                // Accessibility text ranges are optional for live typing. Capture a
+                // correction anchor when available; unsupported editors still receive
+                // ordinary keyboard input without a review/paste step.
+                if (HasExistingSelection(focused)) return PauseStream("Existing text selected");
+                var snapshot = TryReadSelection(focused);
+                _streamCanCorrect = snapshot is not null;
+                if (snapshot is not null) (_streamPrefix, _streamSuffix) = snapshot.Value;
                 _streamTarget = identity;
                 var guard = _streamGuard = new StreamInputGuard();
                 if (!guard.IsAvailable) return PauseStream("Input observation unavailable");
@@ -64,19 +69,22 @@ public sealed partial class WindowsTextInsertionService
                 {
                     try
                     {
-                        if (sender is not AutomationElement element || !identity.SequenceEqual(element.GetRuntimeId())) guard.Interrupt();
+                        if (sender is not AutomationElement element || !identity.SequenceEqual(element.GetRuntimeId())) guard.Interrupt("Focus notification");
                     }
-                    catch { guard.Interrupt(); }
+                    catch { guard.Interrupt("Focus notification"); }
                 };
-                Automation.AddAutomationFocusChangedEventHandler(_focusHandler);
+                await AutomationEventThread.AddAsync(_focusHandler);
             }
-            if (!_streamTarget.SequenceEqual(identity) || !MatchesStream(focused)) return PauseStream("Text, caret or focus changed");
+            // Do not make typing depend on text readback (some editors do not expose
+            // it, or normalize text as it arrives). User input/focus guards still yield
+            // the session permanently when the user moves away or edits manually.
+            if (!HasStreamFocus()) return PauseStream("Input or focus changed");
             cancellationToken.ThrowIfCancellationRequested();
             var inputs = UnicodeInputs(delta);
             var sent = StreamSendInput((uint)inputs.Length, inputs, Marshal.SizeOf<StreamInput>());
             _streamTyped += delta;
             if (sent != inputs.Length) return PauseStream();
-            return await VerifyStreamDeliveryAsync();
+            return await SettleLiveDeliveryAsync();
         }
         catch (Exception ex) when (ex is not OperationCanceledException) { return PauseStream("Editor access failed (" + ex.GetType().Name + ")"); }
     }
@@ -89,11 +97,12 @@ public sealed partial class WindowsTextInsertionService
         var sentInput = false;
         try
         {
-            if (_streamTyped == finalText) return _streamTarget is not null && MatchesStream(AutomationElement.FocusedElement);
-            if (!allowCorrection || _streamTyped.Length == 0) return false;
+            if (_streamTyped == finalText) return HasStreamFocus();
+            if (!allowCorrection || !_streamCanCorrect || _streamTyped.Length == 0) return false;
             // A held stop shortcut must not turn Ctrl+V/Delete into another command.
             for (var attempt = 0; ModifiersPressed() && attempt < 100; attempt++) await Task.Delay(20, cancellationToken);
             if (ModifiersPressed()) return PauseStream("Release shortcut keys to finish insertion");
+            if (!await VerifyStreamDeliveryAsync()) return false;
             var focused = AutomationElement.FocusedElement;
             if (!MatchesStream(focused)) return PauseStream("Text, caret or focus changed");
             var text = (TextPattern)focused.GetCurrentPattern(TextPattern.Pattern);
@@ -108,7 +117,7 @@ public sealed partial class WindowsTextInsertionService
                 return PauseStream("Dictation range unavailable");
             cancellationToken.ThrowIfCancellationRequested();
             owned.Select();
-            if (!MatchesSelectedStream(owned)) return PauseStream("Dictation selection could not be verified");
+            if (!await WaitForSelectedStreamAsync(owned, cancellationToken)) return PauseStream("Dictation selection could not be verified: " + _selectionMismatch);
             cancellationToken.ThrowIfCancellationRequested();
             var inputs = finalText.Length == 0 ? new[] { KeyInput(0x2E, false), KeyInput(0x2E, true) } :
                 _streamInsertionMode == InsertionMode.Type ? UnicodeInputs(finalText) :
@@ -144,16 +153,50 @@ public sealed partial class WindowsTextInsertionService
         }
     }
 
+    private async Task<bool> WaitForSelectedStreamAsync(TextPatternRange owned, CancellationToken token)
+    {
+        // Browser providers can acknowledge Select before GetSelection reflects it.
+        // Wait only for that same verified range; never select again or weaken the
+        // focus/input/context checks, and never inject into an unconfirmed range.
+        for (var attempt = 0; attempt < 10; attempt++)
+        {
+            token.ThrowIfCancellationRequested();
+            if (MatchesSelectedStream(owned)) return true;
+            if (_streamPaused || _streamGuard?.Interrupted != false) return false;
+            await Task.Delay(20, token);
+        }
+        return false;
+    }
+
     private bool MatchesSelectedStream(TextPatternRange owned, bool allowPaused = false)
     {
         var focused = AutomationElement.FocusedElement;
         if ((!allowPaused && _streamPaused) || _streamGuard?.Interrupted != false || !IsEditable(focused) ||
-            _streamTarget is null || !_streamTarget.SequenceEqual(focused.GetRuntimeId())) return false;
+            _streamTarget is null || !_streamTarget.SequenceEqual(focused.GetRuntimeId())) { _selectionMismatch = _streamGuard?.InterruptionReason ?? "Focus or editability"; return false; }
         var text = (TextPattern)focused.GetCurrentPattern(TextPattern.Pattern);
         var selected = text.GetSelection();
-        if (selected.Length != 1 || !selected[0].Compare(owned) || selected[0].GetText(-1) != _streamTyped) return false;
+        if (selected.Length != 1 || !selected[0].Compare(owned) || selected[0].GetText(-1) != _streamTyped) { _selectionMismatch = "Selection range has not matched"; return false; }
         var context = ReadContext(text, selected[0]);
-        return context is not null && context.Value.Prefix == _streamPrefix && context.Value.Suffix == _streamSuffix;
+        var matches = context is not null && context.Value.Prefix == _streamPrefix && context.Value.Suffix == _streamSuffix;
+        if (!matches) _selectionMismatch = "Surrounding context changed";
+        return matches;
+    }
+
+    private async Task<bool> SettleLiveDeliveryAsync()
+    {
+        // SendInput queues events. Let the target consume them before a final
+        // correction or another caller moves its selection. Readback is optional:
+        // missing/normalized text disables correction, not subsequent live typing.
+        for (var attempt = 0; attempt < 100; attempt++)
+        {
+            await Task.Delay(20);
+            if (!HasStreamFocus()) return PauseStream("Input or focus changed");
+            if (!_streamCanCorrect) return true;
+            try { if (MatchesStream(AutomationElement.FocusedElement)) return true; }
+            catch { _streamCanCorrect = false; return true; }
+        }
+        _streamCanCorrect = false;
+        return true;
     }
 
     private async Task<bool> VerifyStreamDeliveryAsync()
@@ -183,6 +226,30 @@ public sealed partial class WindowsTextInsertionService
             focused.TryGetCurrentPattern(ValuePattern.Pattern, out var value) && ((ValuePattern)value).Current.IsReadOnly) return false;
         return focused.Current.ControlType == ControlType.Edit || focused.Current.ControlType == ControlType.Document ||
             focused.TryGetCurrentPattern(TextPattern.Pattern, out _);
+    }
+
+    private bool HasStreamFocus()
+    {
+        var focused = AutomationElement.FocusedElement;
+        return !_streamPaused && _streamGuard?.Interrupted == false && IsEditable(focused) &&
+            _streamTarget is not null && _streamTarget.SequenceEqual(focused.GetRuntimeId());
+    }
+
+    private static bool HasExistingSelection(AutomationElement focused)
+    {
+        try
+        {
+            if (!focused.TryGetCurrentPattern(TextPattern.Pattern, out var pattern)) return false;
+            return ((TextPattern)pattern).GetSelection().Any(range =>
+                range.CompareEndpoints(TextPatternRangeEndpoint.Start, range, TextPatternRangeEndpoint.End) != 0);
+        }
+        catch { return false; }
+    }
+
+    private static (string Prefix, string Suffix)? TryReadSelection(AutomationElement focused)
+    {
+        try { return ReadSelection(focused); }
+        catch { return null; } // Text access is optional for append-only live input.
     }
 
     private static (string Prefix, string Suffix)? ReadSelection(AutomationElement element)

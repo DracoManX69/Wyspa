@@ -11,11 +11,11 @@
                     <TextBlock Text="{Binding CaptureDescription}" Foreground="{DynamicResource InkBrush}" FontWeight="SemiBold" TextWrapping="Wrap"/>
                     <Button Content="Conversation settings" Command="{x:Static local:AppNavigationCommands.OpenConversationSettings}" HorizontalAlignment="Left" ToolTip="Open conversation mode, call audio, and speaker settings" />
                     <WrapPanel Margin="0,7,0,0">
-                        <Button Content="Start" Style="{StaticResource PrimaryButton}" Command="{Binding StartCommand}"/>
-                        <Button Content="{Binding PauseText}" Command="{Binding PauseCommand}"/>
-                        <Button Content="Stop" Command="{Binding StopCommand}"/>
-                        <Button Content="Cancel pending" Command="{Binding CancelPendingCommand}"/>
-                        <Button Content="Floating overlay" Click="OpenOverlay_OnClick"/>
+                        <Button Content="Start" Style="{StaticResource PrimaryButton}" Command="{Binding StartCommand}" ToolTip="Start recording a conversation using the configured microphone and capture sources." />
+                        <Button Content="{Binding PauseText}" Command="{Binding PauseCommand}" ToolTip="Pause or resume conversation recording without ending the session." />
+                        <Button Content="Stop" Command="{Binding StopCommand}" ToolTip="Finish recording. Pending transcription continues until captured audio has been processed." />
+                        <Button Content="Cancel pending" Command="{Binding CancelPendingCommand}" ToolTip="Cancel outstanding conversation transcription requests. Already received text remains available." />
+                        <Button Content="Floating overlay" Click="OpenOverlay_OnClick" ToolTip="Open the compact conversation window. Closing it does not stop recording." />
                     </WrapPanel>
                 </StackPanel>
             </Border>
@@ -25,32 +25,32 @@
                 <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="12"/><ColumnDefinition Width="145"/></Grid.ColumnDefinitions>
                 <StackPanel>
                     <TextBlock Text="Saved conversations" Style="{StaticResource FieldLabel}"/>
-                    <ComboBox ItemsSource="{Binding Notes}" DisplayMemberPath="DisplayLabel" SelectedItem="{Binding SelectedNote}" IsEnabled="{Binding CanBrowse}" AutomationProperties.Name="Saved conversations"/>
+                    <ComboBox ItemsSource="{Binding Notes}" DisplayMemberPath="DisplayLabel" SelectedItem="{Binding SelectedNote}" IsEnabled="{Binding CanBrowse}" AutomationProperties.Name="Saved conversations" ToolTip="Open a previously saved conversation. Browsing is unavailable while capture is active." />
                 </StackPanel>
                 <StackPanel Grid.Column="2">
                     <StackPanel.Style><Style TargetType="StackPanel"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding IsRoomNote}" Value="True"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></StackPanel.Style>
                     <TextBlock Text="My room speaker" Style="{StaticResource FieldLabel}"/>
-                    <ComboBox ItemsSource="{Binding SpeakerChoices}" SelectedItem="{Binding MySpeaker}" AutomationProperties.Name="My room speaker"/>
+                    <ComboBox ItemsSource="{Binding SpeakerChoices}" SelectedItem="{Binding MySpeaker}" AutomationProperties.Name="My room speaker" ToolTip="Choose which detected speaker represents you in this room conversation." />
                 </StackPanel>
             </Grid>
-            <TextBox Text="{Binding Title, UpdateSourceTrigger=PropertyChanged}" LostFocus="SaveTitle_OnLostFocus" AutomationProperties.Name="Note title"/>
+            <TextBox Text="{Binding Title, UpdateSourceTrigger=PropertyChanged}" LostFocus="SaveTitle_OnLostFocus" AutomationProperties.Name="Note title" ToolTip="Rename this conversation. The title saves when you leave the field." />
             <local:NotesTranscriptView Height="300" Margin="0,6"/>
             <WrapPanel>
-                <Button Content="Copy notes" Click="Copy_OnClick"/>
-                <Button Content="Open notes folder" Click="Folder_OnClick"/>
-                <Button Content="Refresh conversations" Command="{Binding RefreshCommand}"/>
-                <Button Content="Save again" Command="{Binding SaveCommand}"/>
-                <Button Content="Delete selected…" Click="Delete_OnClick" IsEnabled="{Binding CanBrowse}"/>
+                <Button Content="Copy notes" Click="Copy_OnClick" ToolTip="Copy the current transcript to the clipboard." />
+                <Button Content="Open notes folder" Click="Folder_OnClick" ToolTip="Open the local folder containing saved notes and transcripts." />
+                <Button Content="Refresh conversations" Command="{Binding RefreshCommand}" ToolTip="Reload the saved conversation list from this computer." />
+                <Button Content="Save again" Command="{Binding SaveCommand}" ToolTip="Save the current conversation to its local note files." />
+                <Button Content="Delete selected…" Click="Delete_OnClick" IsEnabled="{Binding CanBrowse}" ToolTip="Delete the selected local note after confirmation." />
             </WrapPanel>
             <Border Style="{StaticResource Card}" Margin="0,8,0,0">
                 <StackPanel>
                     <TextBlock Text="Conversation summary" Style="{StaticResource FieldLabel}"/>
                     <WrapPanel>
-                        <Button Content="Summarise" Style="{StaticResource PrimaryButton}" Command="{Binding SummariseCommand}"/>
-                        <Button Content="Cancel summary" Command="{Binding CancelSummaryCommand}"/>
+                        <Button Content="Summarise" Style="{StaticResource PrimaryButton}" Command="{Binding SummariseCommand}" ToolTip="Send this transcript to the selected Groq summary model to generate a summary." />
+                        <Button Content="Cancel summary" Command="{Binding CancelSummaryCommand}" ToolTip="Cancel the current summary request without deleting the transcript." />
                     </WrapPanel>
                     <TextBlock Text="{Binding SummaryStatus}" Style="{StaticResource BodyText}" FontSize="11"/>
-                    <TextBox Text="{Binding Summary, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True" MinHeight="90" MaxHeight="350" VerticalScrollBarVisibility="Auto" AutomationProperties.Name="Conversation summary"/>
+                    <TextBox Text="{Binding Summary, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True" MinHeight="90" MaxHeight="350" VerticalScrollBarVisibility="Auto" AutomationProperties.Name="Conversation summary" ToolTip="Read or select the generated conversation summary. Use Ctrl+C to copy selected text." />
                 </StackPanel>
             </Border>
         </StackPanel>

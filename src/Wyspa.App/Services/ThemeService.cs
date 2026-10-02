@@ -12,13 +12,15 @@ public sealed class ThemeService : IDisposable
 {
     private readonly ResourceDictionary _resources;
     private readonly Func<bool> _readSystemDarkMode;
+    private readonly Func<MediaColor> _readAccentColor;
 
     public event EventHandler<bool>? ThemeChanged;
 
-    public ThemeService(ResourceDictionary resources, Func<bool>? readSystemDarkMode = null)
+    public ThemeService(ResourceDictionary resources, Func<bool>? readSystemDarkMode = null, Func<MediaColor>? readAccentColor = null)
     {
         _resources = resources;
         _readSystemDarkMode = readSystemDarkMode ?? ShouldUseDarkMode;
+        _readAccentColor = readAccentColor ?? (() => WpfSystemColors.AccentColor);
         try
         {
             SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
@@ -62,19 +64,27 @@ public sealed class ThemeService : IDisposable
 #pragma warning restore WPF0001
 
         Set("AppBackgroundBrush", darkMode ? "#1E1E1E" : "#EFEFEF");
-        Set("ChromeBrush", darkMode ? "#1A2023" : "#E9F0F2");
+        Set("ChromeBrush", darkMode ? "#202020" : "#E9E9E9");
         Set("PanelBrush", darkMode ? "#2B2B2B" : "#FCFCFC");
         Set("PanelAltBrush", darkMode ? "#343434" : "#F4F4F4");
         Set("InputBrush", darkMode ? "#242424" : "#FFFFFF");
         Set("InkBrush", darkMode ? "#F7F7F7" : "#171717");
         Set("MutedBrush", darkMode ? "#D1D1D1" : "#505050");
         Set("LineBrush", darkMode ? "#555555" : "#D1D1D1");
-        Set("AccentBrush", darkMode ? "#5DD7CF" : "#2B7A78");
-        Set("AccentDarkBrush", darkMode ? "#99E8E1" : "#19595A");
-        Set("AccentSoftBrush", darkMode ? "#293F40" : "#E2EEEE");
-        Set("AccentTextBrush", darkMode ? "#102120" : "#FFFFFF");
+        var accent = _readAccentColor();
+        accent.A = 255;
+        var accentText = Contrast(accent, Colors.Black) >= Contrast(accent, Colors.White) ? Colors.Black : Colors.White;
+        var surface = darkMode ? MediaColor.FromRgb(30, 30, 30) : MediaColor.FromRgb(239, 239, 239);
+        var link = accent;
+        var contrastTarget = darkMode ? Colors.White : Colors.Black;
+        for (var i = 0; i < 20 && Contrast(link, surface) < 4.5; i++) link = Blend(link, contrastTarget, .12);
+        _resources["AccentBrush"] = new SolidColorBrush(accent);
+        _resources["LogoGradientBrush"] = new SolidColorBrush(accent);
+        _resources["AccentDarkBrush"] = new SolidColorBrush(link);
+        _resources["AccentSoftBrush"] = new SolidColorBrush(Blend(surface, accent, darkMode ? .22 : .12));
+        _resources["AccentTextBrush"] = new SolidColorBrush(accentText);
+        _resources["SelectedTextBrush"] = new SolidColorBrush(accentText);
         Set("WarnBrush", darkMode ? "#FFBE90" : "#9D4C20");
-        Set("SelectedTextBrush", darkMode ? "#102120" : "#FFFFFF");
 
         if (highContrast)
         {
@@ -83,6 +93,7 @@ public sealed class ThemeService : IDisposable
             foreach (var name in new[] { "InkBrush", "MutedBrush", "LineBrush", "WarnBrush" })
                 _resources[name] = WpfSystemColors.WindowTextBrush;
             _resources["AccentBrush"] = WpfSystemColors.HighlightBrush;
+            _resources["LogoGradientBrush"] = WpfSystemColors.HighlightBrush;
             _resources["AccentDarkBrush"] = WpfSystemColors.HotTrackBrush;
             _resources["AccentSoftBrush"] = WpfSystemColors.ControlBrush;
             _resources["AccentTextBrush"] = WpfSystemColors.HighlightTextBrush;
@@ -96,8 +107,8 @@ public sealed class ThemeService : IDisposable
             _resources[name] = _resources["AccentBrush"];
         foreach (var name in new[] { "AccentButtonForeground", "AccentButtonForegroundPointerOver", "AccentButtonForegroundPressed" })
             _resources[name] = _resources["AccentTextBrush"];
-        _resources["AccentButtonBackgroundPointerOver"] = highContrast ? WpfSystemColors.HighlightBrush : new SolidColorBrush((MediaColor)MediaColorConverter.ConvertFromString(darkMode ? "#81E1DB" : "#256E6D"));
-        _resources["AccentButtonBackgroundPressed"] = highContrast ? WpfSystemColors.HighlightBrush : new SolidColorBrush((MediaColor)MediaColorConverter.ConvertFromString(darkMode ? "#48BAB3" : "#205E5D"));
+        _resources["AccentButtonBackgroundPointerOver"] = highContrast ? WpfSystemColors.HighlightBrush : new SolidColorBrush(Blend(accent, accentText == Colors.Black ? Colors.White : Colors.Black, .08));
+        _resources["AccentButtonBackgroundPressed"] = highContrast ? WpfSystemColors.HighlightBrush : new SolidColorBrush(Blend(accent, accentText == Colors.Black ? Colors.White : Colors.Black, .16));
         foreach (var name in new[] { "HyperlinkForeground", "HyperlinkForegroundPointerOver", "HyperlinkForegroundPressed", "TextControlBorderBrushFocused" })
             _resources[name] = _resources["AccentDarkBrush"];
         ThemeChanged?.Invoke(this, IsDarkMode);
@@ -116,10 +127,27 @@ public sealed class ThemeService : IDisposable
 
     private void OnUserPreferenceChanged(object sender, UserPreferenceChangedEventArgs e)
     {
-        if (e.Category is UserPreferenceCategory.General or UserPreferenceCategory.VisualStyle or UserPreferenceCategory.Accessibility)
+        if (e.Category is UserPreferenceCategory.General or UserPreferenceCategory.VisualStyle or UserPreferenceCategory.Accessibility or UserPreferenceCategory.Color or UserPreferenceCategory.Desktop)
         {
-            System.Windows.Application.Current.Dispatcher.Invoke(RefreshTheme);
+            System.Windows.Application.Current.Dispatcher.BeginInvoke(RefreshTheme);
         }
+    }
+
+    private static MediaColor Blend(MediaColor from, MediaColor to, double amount) => MediaColor.FromRgb(
+        (byte)Math.Round(from.R + (to.R - from.R) * amount),
+        (byte)Math.Round(from.G + (to.G - from.G) * amount),
+        (byte)Math.Round(from.B + (to.B - from.B) * amount));
+
+    private static double Luminance(MediaColor color)
+    {
+        static double Linear(byte value) => value / 255d <= .04045 ? value / 255d / 12.92 : Math.Pow((value / 255d + .055) / 1.055, 2.4);
+        return .2126 * Linear(color.R) + .7152 * Linear(color.G) + .0722 * Linear(color.B);
+    }
+
+    private static double Contrast(MediaColor a, MediaColor b)
+    {
+        var x = Luminance(a); var y = Luminance(b);
+        return (Math.Max(x, y) + .05) / (Math.Min(x, y) + .05);
     }
 
     private static bool ShouldUseDarkMode()

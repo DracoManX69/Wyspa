@@ -5,21 +5,21 @@
             <TextBlock Text="Transcribe the audio of a public, single video with your saved Groq connection." Style="{StaticResource BodyText}"/>
             <Border Style="{StaticResource Card}" Margin="0,10,0,6"><StackPanel>
                 <TextBlock Text="Video URL" Style="{StaticResource FieldLabel}"/>
-                <TextBox Text="{Binding Url, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanConfigure}" AutomationProperties.Name="YouTube video URL"/>
-                <WrapPanel><Button Content="Transcribe video" Style="{StaticResource PrimaryButton}" Command="{Binding ImportCommand}"/><Button Content="Cancel" Command="{Binding CancelImportCommand}"/></WrapPanel>
+                <TextBox Text="{Binding Url, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanConfigure}" AutomationProperties.Name="YouTube video URL" ToolTip="Paste a public or unlisted single-video YouTube URL. Playlists and login-only videos are not supported." />
+                <WrapPanel><Button Content="Transcribe video" Style="{StaticResource PrimaryButton}" Command="{Binding ImportCommand}" ToolTip="Download this video’s audio for transcription using your saved Groq connection." /><Button Content="Cancel" Command="{Binding CancelImportCommand}" ToolTip="Cancel the current operation. Results already received remain available." /></WrapPanel>
                 <TextBlock Text="Public and unlisted videos, Shorts, and completed broadcasts. Playlists and login-only videos are not supported." Style="{StaticResource BodyText}" FontSize="11"/>
             </StackPanel></Border>
             <TextBlock Text="{Binding VideoStatus}" Style="{StaticResource BodyText}" AutomationProperties.LiveSetting="Polite"/>
             <TextBlock Text="{Binding Error}" Foreground="{DynamicResource WarnBrush}" TextWrapping="Wrap" Margin="0,6"/>
             <TextBlock Text="Saved videos" Style="{StaticResource FieldLabel}"/>
-            <ComboBox AutomationProperties.Name="Saved videos" ItemsSource="{Binding Notes}" DisplayMemberPath="DisplayLabel" SelectedItem="{Binding SelectedNote}" IsEnabled="{Binding CanBrowse}"/>
+            <ComboBox AutomationProperties.Name="Saved videos" ItemsSource="{Binding Notes}" DisplayMemberPath="DisplayLabel" SelectedItem="{Binding SelectedNote}" IsEnabled="{Binding CanBrowse}" ToolTip="Open a previously transcribed YouTube video. This list is separate from conversations." />
             <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}" Margin="0,10,0,0"/>
             <local:NotesTranscriptView Height="280"/>
-            <WrapPanel><Button Content="Copy notes" Click="Copy_OnClick"/><Button Content="Open notes folder" Click="Folder_OnClick"/><Button Content="Refresh videos" Command="{Binding RefreshCommand}"/><Button Content="Delete selected…" Click="Delete_OnClick" IsEnabled="{Binding CanBrowse}"/></WrapPanel>
+            <WrapPanel><Button Content="Copy notes" Click="Copy_OnClick" ToolTip="Copy the current transcript to the clipboard." /><Button Content="Open notes folder" Click="Folder_OnClick" ToolTip="Open the local folder containing saved notes and transcripts." /><Button Content="Refresh videos" Command="{Binding RefreshCommand}" ToolTip="Reload the saved YouTube video list from this computer." /><Button Content="Delete selected…" Click="Delete_OnClick" IsEnabled="{Binding CanBrowse}" ToolTip="Delete the selected local note after confirmation." /></WrapPanel>
             <TextBlock Text="Video summary" Style="{StaticResource FieldLabel}"/>
-            <WrapPanel><Button Content="Summarise" Style="{StaticResource PrimaryButton}" Command="{Binding SummariseCommand}"/><Button Content="Cancel summary" Command="{Binding CancelSummaryCommand}"/></WrapPanel>
+            <WrapPanel><Button Content="Summarise" Style="{StaticResource PrimaryButton}" Command="{Binding SummariseCommand}" ToolTip="Send this transcript to the selected Groq summary model to generate a summary." /><Button Content="Cancel summary" Command="{Binding CancelSummaryCommand}" ToolTip="Cancel the current summary request without deleting the transcript." /></WrapPanel>
             <TextBlock Text="{Binding SummaryStatus}" Style="{StaticResource BodyText}"/>
-            <TextBox Text="{Binding Summary, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" MinHeight="90" MaxHeight="350" VerticalScrollBarVisibility="Auto"/>
+            <TextBox Text="{Binding Summary, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" MinHeight="90" MaxHeight="350" VerticalScrollBarVisibility="Auto" ToolTip="Read or select the generated summary. Use Ctrl+C to copy selected text." />
         </StackPanel>
     </ScrollViewer>
 </UserControl>

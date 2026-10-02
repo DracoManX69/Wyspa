@@ -30,6 +30,7 @@ public sealed class AppSettings
     public bool HistoryEnabled { get; set; }
     public bool RetainAudioForDebugging { get; set; }
     public double OverlayOpacity { get; set; } = 0.82;
+    public bool WindowsNotificationsEnabled { get; set; } = true;
     public AppTheme Theme { get; set; } = AppTheme.System;
     public float AutoCaptureThreshold { get; set; } = 0.08f;
     public int AutoCaptureSilenceMs { get; set; } = 1200;

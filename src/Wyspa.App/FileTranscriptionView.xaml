@@ -11,12 +11,12 @@
             <Border Style="{StaticResource Card}" Margin="0,8,0,7">
                 <StackPanel>
                     <TextBlock Text="Lossless preparation on your PC. Original files stay untouched." Style="{StaticResource BodyText}"
-                               ToolTip="WAV and AIFF are compressed losslessly where possible. Compressed audio keeps its original format. Large PCM/FLAC files are split automatically. Uses your transcription model, language and vocabulary settings; skips AI rewriting and command interpretation." />
+                              ToolTip="WAV and AIFF are compressed losslessly where possible. Compressed audio keeps its original format. Large PCM/FLAC files are split automatically. Uses your transcription model, language and vocabulary settings; skips AI rewriting and command interpretation." />
                     <WrapPanel Margin="0,5,0,0">
-                        <Button Content="Choose files…" Click="ChooseFiles_OnClick" IsEnabled="{Binding CanChooseFiles}" />
-                        <Button Content="Transcribe" Style="{StaticResource PrimaryButton}" Command="{Binding TranscribeCommand}" />
-                        <Button Content="Cancel" Command="{Binding CancelCommand}" />
-                        <Button Content="Clear" Command="{Binding ClearCommand}" />
+                        <Button Content="Choose files…" Click="ChooseFiles_OnClick" IsEnabled="{Binding CanChooseFiles}" ToolTip="Select one or more local audio files to transcribe. Original audio files are preserved." />
+                        <Button Content="Transcribe" Style="{StaticResource PrimaryButton}" Command="{Binding TranscribeCommand}" ToolTip="Transcribe the queued audio files using your Groq speech model and language settings. AI rewriting is not applied." />
+                        <Button Content="Cancel" Command="{Binding CancelCommand}" ToolTip="Cancel the current operation. Results already received remain available." />
+                        <Button Content="Clear" Command="{Binding ClearCommand}" ToolTip="Remove items from the file list without deleting the original audio files." />
                     </WrapPanel>
                     <TextBlock Text="WAV, FLAC, MP3, M4A, OGG, WebM, MPGA, AIFF" Style="{StaticResource BodyText}" FontSize="11" />
                 </StackPanel>
@@ -40,10 +40,10 @@
             <TextBlock Text="Transcript" Style="{StaticResource FieldLabel}" />
             <TextBox Text="{Binding SelectedFile.Transcript, Mode=OneWay}" IsReadOnly="True" Height="180"
                      TextWrapping="Wrap" AcceptsReturn="True" VerticalScrollBarVisibility="Auto"
-                     AutomationProperties.Name="File transcript" />
+                     AutomationProperties.Name="File transcript" ToolTip="Read or select the recognized text. Copy transcript copies it all; Save text exports a text file." />
             <WrapPanel>
-                <Button Content="Copy transcript" Click="CopyTranscript_OnClick" IsEnabled="{Binding SelectedFile.HasTranscript, FallbackValue=False, TargetNullValue=False}" />
-                <Button Content="Save text…" Click="SaveTranscript_OnClick" IsEnabled="{Binding SelectedFile.HasTranscript, FallbackValue=False, TargetNullValue=False}" />
+                <Button Content="Copy transcript" Click="CopyTranscript_OnClick" IsEnabled="{Binding SelectedFile.HasTranscript, FallbackValue=False, TargetNullValue=False}" ToolTip="Copy the selected file’s full transcript to the clipboard." />
+                <Button Content="Save text…" Click="SaveTranscript_OnClick" IsEnabled="{Binding SelectedFile.HasTranscript, FallbackValue=False, TargetNullValue=False}" ToolTip="Save the selected transcript as a text file at a location you choose." />
             </WrapPanel>
         </StackPanel>
     </ScrollViewer>

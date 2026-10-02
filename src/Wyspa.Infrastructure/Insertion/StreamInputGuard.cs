@@ -12,7 +12,8 @@ internal sealed class StreamInputGuard : IDisposable
     private IntPtr _keyboard, _mouse;
     private volatile bool _interrupted;
     public bool Interrupted => _interrupted;
-    public void Interrupt() => _interrupted = true;
+    public string? InterruptionReason { get; private set; }
+    public void Interrupt(string reason = "Keyboard input") { InterruptionReason = reason; _interrupted = true; }
     public bool IsAvailable => _keyboard != IntPtr.Zero && _mouse != IntPtr.Zero;
 
     public StreamInputGuard()
@@ -37,7 +38,7 @@ internal sealed class StreamInputGuard : IDisposable
 
     private IntPtr Mouse(int code, IntPtr message, IntPtr data)
     {
-        if (code >= 0 && ((int)message is 0x201 or 0x204 or 0x207)) Interrupt();
+        if (code >= 0 && ((int)message is 0x201 or 0x204 or 0x207)) Interrupt("Mouse input");
         return CallNextHookEx(IntPtr.Zero, code, message, data);
     }
 
