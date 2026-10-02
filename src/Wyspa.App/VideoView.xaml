@@ -1,0 +1,25 @@
+<UserControl x:Class="Wyspa.App.VideoView" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:local="clr-namespace:Wyspa.App">
+    <ScrollViewer Padding="10" VerticalScrollBarVisibility="Auto">
+        <StackPanel>
+            <TextBlock Text="YouTube to text" Style="{StaticResource SectionTitle}"/>
+            <TextBlock Text="Transcribe the audio of a public, single video with your saved Groq connection." Style="{StaticResource BodyText}"/>
+            <Border Style="{StaticResource Card}" Margin="0,10,0,6"><StackPanel>
+                <TextBlock Text="Video URL" Style="{StaticResource FieldLabel}"/>
+                <TextBox Text="{Binding Url, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanConfigure}" AutomationProperties.Name="YouTube video URL"/>
+                <WrapPanel><Button Content="Transcribe video" Style="{StaticResource PrimaryButton}" Command="{Binding ImportCommand}"/><Button Content="Cancel" Command="{Binding CancelImportCommand}"/></WrapPanel>
+                <TextBlock Text="Public and unlisted videos, Shorts, and completed broadcasts. Playlists and login-only videos are not supported." Style="{StaticResource BodyText}" FontSize="11"/>
+            </StackPanel></Border>
+            <TextBlock Text="{Binding VideoStatus}" Style="{StaticResource BodyText}" AutomationProperties.LiveSetting="Polite"/>
+            <TextBlock Text="{Binding Error}" Foreground="{DynamicResource WarnBrush}" TextWrapping="Wrap" Margin="0,6"/>
+            <TextBlock Text="Saved videos" Style="{StaticResource FieldLabel}"/>
+            <ComboBox AutomationProperties.Name="Saved videos" ItemsSource="{Binding Notes}" DisplayMemberPath="DisplayLabel" SelectedItem="{Binding SelectedNote}" IsEnabled="{Binding CanBrowse}"/>
+            <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}" Margin="0,10,0,0"/>
+            <local:NotesTranscriptView Height="280"/>
+            <WrapPanel><Button Content="Copy notes" Click="Copy_OnClick"/><Button Content="Open notes folder" Click="Folder_OnClick"/><Button Content="Refresh videos" Command="{Binding RefreshCommand}"/><Button Content="Delete selected…" Click="Delete_OnClick" IsEnabled="{Binding CanBrowse}"/></WrapPanel>
+            <TextBlock Text="Video summary" Style="{StaticResource FieldLabel}"/>
+            <WrapPanel><Button Content="Summarise" Style="{StaticResource PrimaryButton}" Command="{Binding SummariseCommand}"/><Button Content="Cancel summary" Command="{Binding CancelSummaryCommand}"/></WrapPanel>
+            <TextBlock Text="{Binding SummaryStatus}" Style="{StaticResource BodyText}"/>
+            <TextBox Text="{Binding Summary, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" MinHeight="90" MaxHeight="350" VerticalScrollBarVisibility="Auto"/>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

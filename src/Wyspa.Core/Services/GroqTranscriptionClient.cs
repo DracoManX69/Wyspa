@@ -41,18 +41,19 @@ public sealed class GroqTranscriptionClient : IGroqTranscriptionClient
 
             await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
             using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
-            var models = document.RootElement.TryGetProperty("data", out var data)
-                ? data.EnumerateArray()
-                    .Select(model => model.TryGetProperty("id", out var id) ? id.GetString() : null)
+            if (document.RootElement.ValueKind != JsonValueKind.Object ||
+                !document.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array)
+                return ConnectionTestResult.Failed("Groq returned an unreadable model list. Try refreshing again.");
+            var models = data.EnumerateArray()
+                    .Where(model => model.ValueKind == JsonValueKind.Object &&
+                        (!model.TryGetProperty("active", out var active) || active.ValueKind != JsonValueKind.False))
+                    .Select(model => model.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String ? id.GetString() : null)
                     .Where(id => !string.IsNullOrWhiteSpace(id))
                     .Select(id => id!)
-                    .ToArray()
-                : [];
+                    .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
 
             var available = models.Contains(DefaultModel, StringComparer.OrdinalIgnoreCase);
-            var message = available
-                ? "Connected. Groq Whisper Large v3 Turbo is available."
-                : "Connected, but whisper-large-v3-turbo was not listed for this key.";
+            var message = $"Connected to Groq. {models.Length} active models returned.";
             return new ConnectionTestResult(true, available, message, models);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -62,6 +63,10 @@ public sealed class GroqTranscriptionClient : IGroqTranscriptionClient
         catch (HttpRequestException)
         {
             return ConnectionTestResult.Failed("Could not reach Groq. Check your network connection.");
+        }
+        catch (JsonException)
+        {
+            return ConnectionTestResult.Failed("Groq returned an unreadable model list. Try refreshing again.");
         }
     }
 
@@ -141,6 +146,12 @@ public sealed class GroqTranscriptionClient : IGroqTranscriptionClient
             { new StringContent(options.ResponseFormat), "response_format" },
             { new StringContent(options.Temperature.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)), "temperature" }
         };
+
+        if (options.ResponseFormat == "verbose_json")
+        {
+            content.Add(new StringContent("word"), "timestamp_granularities[]");
+            content.Add(new StringContent("segment"), "timestamp_granularities[]");
+        }
 
         if (!string.IsNullOrWhiteSpace(options.Language))
         {

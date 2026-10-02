@@ -17,6 +17,7 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _autoSaveTimer;
     private bool _isReadyForAutoSave;
     private bool _isUpdatingApiKeyBox;
+    private bool _hasRequestedModels;
     private MainViewModel? _observedViewModel;
     private HotkeyRecordingTarget _recordingHotkeyTarget = HotkeyRecordingTarget.None;
     private ScratchpadWindow? _scratchpadWindow;
@@ -52,6 +53,18 @@ public partial class MainWindow : Window
         NativeWindowStyler.Apply(this, darkMode);
         _scratchpadWindow?.ApplyTheme(darkMode);
     }
+
+    private void OpenSettings_OnClick(object sender, RoutedEventArgs e) => SettingsTab.IsSelected = true;
+
+    private async void SettingsContent_OnLoaded(object sender, RoutedEventArgs e)
+    {
+        if (_hasRequestedModels || DataContext is not MainViewModel { HasApiKey: true } viewModel) return;
+        _hasRequestedModels = true;
+        await viewModel.RefreshModelsAsync();
+    }
+
+    private bool IsSettingsChange(RoutedEventArgs e) => e.OriginalSource is DependencyObject source &&
+        SettingsContent.IsAncestorOf(source) && DataContext is MainViewModel;
 
     private void OpenScratchpadButton_OnClick(object sender, RoutedEventArgs e)
     {
@@ -320,22 +333,28 @@ public partial class MainWindow : Window
 
     private void AutoSaveControl_OnChanged(object sender, RoutedEventArgs e)
     {
+        if (!IsSettingsChange(e)) return;
         QueueSettingsChange(saveImmediately: true);
     }
 
     private void AutoSaveComboBox_OnSelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
     {
+        if (!IsSettingsChange(e)) return;
         if (e.OriginalSource is not System.Windows.Controls.ComboBox) return;
+        if (e.OriginalSource is System.Windows.Controls.ComboBox { Tag: "GroqModel" } &&
+            DataContext is MainViewModel { Models.IsRefreshing: true }) return;
         QueueSettingsChange(saveImmediately: true);
     }
 
     private void AutoSaveSlider_OnValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
+        if (!IsSettingsChange(e)) return;
         QueueSettingsChange(saveImmediately: false);
     }
 
     private void AutoSaveTextBox_OnLostFocus(object sender, RoutedEventArgs e)
     {
+        if (!IsSettingsChange(e)) return;
         if (e.OriginalSource is System.Windows.Controls.TextBox { IsReadOnly: true }) return;
         if (ReferenceEquals(e.OriginalSource, HotkeyRecorderBox) ||
             ReferenceEquals(e.OriginalSource, AutoCaptureHotkeyRecorderBox) ||

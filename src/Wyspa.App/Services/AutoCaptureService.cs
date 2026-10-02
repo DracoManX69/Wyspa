@@ -7,6 +7,7 @@ namespace Wyspa.App.Services;
 
 public sealed class AutoCaptureService : IDisposable
 {
+    public bool Suspended { get; set; }
     private readonly ISettingsService _settingsService;
     private readonly ISecretStore _secretStore;
     private readonly IAudioLevelMonitorService _monitor;
@@ -191,7 +192,7 @@ public sealed class AutoCaptureService : IDisposable
         try
         {
             var settings = GetSettingsSnapshot();
-            if (_audioCapture.IsRecording ||
+            if (Suspended || _audioCapture.IsRecording ||
                 _isStarting ||
                 _isStopping ||
                 settings.ActivationMode is not ActivationMode.AutoCapture ||
@@ -294,8 +295,8 @@ public sealed class AutoCaptureService : IDisposable
 
     private bool ShouldMonitorRun(AppSettings settings) => ShouldMonitorRun(settings, _hasApiKey);
 
-    private static bool ShouldMonitorRun(AppSettings settings, bool hasApiKey) =>
-        hasApiKey &&
+    private bool ShouldMonitorRun(AppSettings settings, bool hasApiKey) =>
+        !Suspended && hasApiKey &&
         settings.ActivationMode is ActivationMode.AutoCapture &&
         settings.AutoCaptureListeningEnabled;
 

@@ -8,7 +8,7 @@ Wyspa and this privacy document were written and produced with AI assistance fro
 
 ## Summary
 
-Wyspa is designed to keep local data local where possible. It does not include analytics, screenshot capture, active-window capture, or transcript logging by default.
+Wyspa does not include analytics or screenshot/active-window-content capture. Ordinary dictation history is not stored. Conversation and YouTube modes deliberately save transcripts and summaries locally, as described below.
 
 Because transcription is performed by Groq, dictated audio is sent to Groq when you use the app. If Groq writing cleanup is enabled, transcript text is also sent to Groq for rewriting in the selected tone. If command intent is enabled, transcript text may also be sent to Groq for intent interpretation.
 
@@ -16,7 +16,7 @@ Because transcription is performed by Groq, dictated audio is sent to Groq when 
 
 For transcription, Wyspa sends:
 
-- the microphone audio clip for the current dictation, or audio files explicitly selected in Audio Files after you click Transcribe;
+- the microphone audio clip for dictation; audio files selected in Audio Files after Transcribe; microphone and selected output audio after starting Conversation; or audio downloaded from a YouTube URL after Transcribe video;
 - the selected transcription model ID, normally `whisper-large-v3-turbo`;
 - optional language setting, such as `en`;
 - optional custom prompt or vocabulary text;
@@ -48,7 +48,7 @@ Wyspa does not intentionally send:
 - clipboard contents;
 - keystroke history;
 - file contents other than audio files you explicitly choose to transcribe;
-- saved transcripts;
+- saved transcripts, except the selected note when you explicitly click Summarise;
 - crash logs;
 - your Groq API key, except as the authorization header required to call Groq.
 
@@ -75,7 +75,7 @@ Examples include:
 - AutoCapture media handling;
 - insertion mode;
 - start minimized/start with Windows settings;
-- privacy-related toggles such as audio retention and history settings.
+- privacy-related toggles such as dictation audio retention.
 
 The Groq API key is stored separately in:
 
@@ -128,7 +128,7 @@ Choose Yes to preserve:
 %AppData%\Wyspa
 ```
 
-Choose No to remove settings, crash logs, and the encrypted Groq API key.
+Choose No to remove settings, saved conversation/YouTube notes, crash logs, and the encrypted Groq API key.
 
 You can also remove the saved Groq key from inside Wyspa settings.
 
@@ -143,3 +143,18 @@ Audio Files uses local lossless compression where applicable before uploading to
 File transcription uses the saved transcription model, language, and custom vocabulary prompt. It does not send transcripts to writing cleanup or intent models. Temporary compressed/split files are removed after success, failure, or cancellation, regardless of the microphone debug-retention setting. A crash or forced termination may leave files under `%TEMP%\Wyspa\FileTranscription`.
 
 File transcripts are held in memory until cleared or the app exits. Copy and Save are explicit local actions. Cancellation stops future uploads but cannot recall audio already sent to Groq.
+
+
+## Conversation notes and YouTube (0.7.0)
+
+Conversation capture starts only when you select Start. Computer-call mode sends microphone and selected output audio to Groq in separate short requests. Output-device capture includes all sound on that device. App capture includes the selected process and its child processes, not a single browser tab. In-person mode sends the microphone audio to Groq; speaker segmentation and matching run locally using bundled models. A short rolling audio context and speaker embeddings exist only in memory for that session and are cleared when it finishes; they are not saved or uploaded as speaker profiles.
+
+Summarise sends the selected transcript, speaker labels and timestamps to Groq using the existing protected API key and the chosen chat model. Long notes may require several summarisation requests. No automatic summary is requested.
+
+YouTube import contacts YouTube and its media hosts through bundled yt-dlp, then sends the downloaded audio to Groq. It does not read browser cookies or signed-in sessions. The video URL and title are saved with the transcript.
+
+Conversation and YouTube transcripts and summaries are automatically retained on this PC in `%AppData%\Wyspa\Notes`, with a JSON file for the app and a readable TXT file for each note. These text files are not separately encrypted. Use Delete selected to delete both copies. No extra cloud notes account or sync service is used. The dictation audio-retention switch does not disable this storage. Conversation and YouTube each show only their own saved items.
+
+Temporary audio is placed under `%TEMP%\Wyspa` and removed after its processing request finishes, including normal cancellation and failure. A force-kill, power failure, or filesystem failure may leave temporary files; they can be removed from that folder. These new modes never intentionally retain recordings, even if dictation audio debugging is enabled.
+
+The overlay indicates capture state; closing it does not stop the session. Pause stops both sources. Stop stops capture and finishes pending transcription; Cancel pending skips remaining requests and records gap markers. Quitting allows a short bounded finish period, then cancels remaining requests and saves gap markers.

@@ -81,6 +81,12 @@ function Set-AppHostRelativePath {
     [System.IO.File]::WriteAllBytes($ExePath, $bytes)
 }
 
+foreach ($requiredTool in @("Tools\Video\yt-dlp.exe", "Tools\Video\ffmpeg.exe", "Tools\Video\deno.exe", "Tools\Speakers\segmentation.onnx", "Tools\Speakers\embedding.onnx")) {
+    if (-not (Test-Path (Join-Path "src\Wyspa.App" $requiredTool))) {
+        throw "Missing v7 dependency: $requiredTool. Run python scripts/prepare-v7-tools.py before packaging."
+    }
+}
+
 dotnet publish .\src\Wyspa.App\Wyspa.App.csproj `
     --configuration $Configuration `
     --runtime win-x64 `
@@ -88,6 +94,8 @@ dotnet publish .\src\Wyspa.App\Wyspa.App.csproj `
     -p:PublishSingleFile=$singleFileValue `
     -p:IncludeNativeLibrariesForSelfExtract=$selfContainedValue `
     -o $Output
+
+if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed." }
 
 if (-not $SelfContained -and -not $SingleFile) {
     $publishPath = Resolve-Path $Output

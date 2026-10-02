@@ -11,7 +11,7 @@ Wyspa and this installer documentation were written and produced with AI assista
 The installer build creates:
 
 ```text
-artifacts\installer\WyspaSetup-0.6.1-win-x64.exe
+artifacts\installer\WyspaSetup-0.7.0-win-x64.exe
 ```
 
 This setup executable contains the Wyspa app files. It does not bundle the Microsoft .NET runtime.
@@ -49,7 +49,15 @@ If the compiler is not detected automatically:
 .\scripts\installer.ps1 -InnoSetupCompiler "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
 ```
 
-The script first runs the Wyspa publish step, then invokes Inno Setup.
+Before the first v7 build, run `python scripts/prepare-v7-tools.py` (Python 3.11+). This fetches checksum-verified video utilities and local speaker models; the installed app never installs tools itself. Then the installer script runs the Wyspa publish step and invokes Inno Setup.
+
+A self-contained portable build can also be produced with:
+
+```powershell
+dotnet publish src/Wyspa.App/Wyspa.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -o artifacts/portable/0.7.0
+```
+
+Keep the entire portable folder together, including `Tools` and native DLLs. This version includes its .NET runtime. The standard installer remains framework-dependent and checks for .NET 10 as before.
 
 ## Installer Behavior
 
@@ -143,7 +151,7 @@ Before publishing a GitHub release:
 
 - Run `.\scripts\test.ps1`.
 - Run `.\scripts\installer.ps1`.
-- Confirm `artifacts\installer\WyspaSetup-0.6.1-win-x64.exe` exists.
+- Confirm `artifacts\installer\WyspaSetup-0.7.0-win-x64.exe` exists.
 - Confirm the installer opens normally on Windows.
 - Install Wyspa, launch it, then uninstall it while the tray app is running.
 - Confirm uninstall closes Wyspa and removes installed files.

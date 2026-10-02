@@ -52,14 +52,14 @@ Open Wyspa Settings > Groq.
 
 - Paste the key again.
 - Make sure there are no extra spaces before or after it.
-- Click Test connection.
+- Click Save and test key.
 - Confirm the key is active in the Groq Console.
 
 Wyspa checks the key by calling Groq's models endpoint and looking for transcription model availability.
 
 ## Groq Model Not Available
 
-If Wyspa connects but says `whisper-large-v3-turbo` is not listed, the key may not have access to that model.
+Open Settings > Groq and select Refresh models. If a saved model is marked unavailable, choose a compatible replacement from its dropdown. A network or authentication failure keeps your previous choices. Newly introduced model families may require a Wyspa compatibility update because Groq does not document capabilities in the model-list response.
 
 Try:
 
@@ -69,7 +69,7 @@ Try:
 
 ## Network Or Rate Limit Error
 
-Check your internet connection and try Test connection again.
+Check your internet connection and try Save and test key again.
 
 Groq errors may be temporary. Rate limit errors usually clear after waiting a short time.
 
@@ -79,7 +79,7 @@ Check:
 
 - Windows Settings > Privacy & security > Microphone;
 - microphone access for desktop apps;
-- the selected input device in Wyspa Settings > Input;
+- the selected input device in Wyspa Settings > Audio & capture;
 - whether the Windows input meter moves while speaking;
 - whether another app has exclusive control of the microphone.
 
@@ -91,7 +91,7 @@ This usually means Groq received silence or the wrong microphone input.
 
 Try:
 
-- choose the correct microphone in Settings > Input;
+- choose the correct microphone in Settings > Audio & capture;
 - speak while watching the input meter;
 - lower the AutoCapture threshold if using AutoCapture;
 - make sure Windows microphone permissions are enabled;
@@ -130,7 +130,7 @@ Combos such as `Ctrl+F4` should be supported.
 
 ## AutoCapture Media Handling Does Not Affect Music
 
-Open Settings > Input and check AutoCapture Media Handling.
+Open Settings > Audio & capture and check AutoCapture Media Handling.
 
 Options:
 
@@ -173,7 +173,7 @@ If this bothers you, switch to Type insertion mode.
 
 ## Overlay Is Too Visible Or Too Faint
 
-Open Settings > Behavior and adjust Recording overlay transparency.
+Open Settings > System and adjust Overlay Background Opacity.
 
 - Lower values make the background more transparent.
 - Higher values make the overlay background more opaque.
@@ -215,3 +215,15 @@ Also confirm the .NET 10 Desktop Runtime x64 is installed.
 5. Reinstall Wyspa.
 
 This removes settings and the encrypted Groq API key, so you will need to add your key again.
+
+
+## Conversation notes (0.7.0)
+
+- **Selected app is unavailable:** per-app capture requires Windows build 20348 or newer. On Windows 10 build 19045 use Output device. A browser process includes its child processes and may include multiple tabs.
+- **Other side appears in your microphone messages:** use headphones or reduce speaker leakage into the microphone. Source separation is not acoustic echo cancellation.
+- **One room speaker gets several labels:** lower the room speaker-matching setting slightly and try a new session. If distinct voices merge, raise it. These labels are experimental and not biometric identity verification. Select your own detected speaker after speaking.
+- **Speech is missing or noise becomes text:** adjust Speech threshold. Lower values capture quieter speech; higher values reject more background noise. Shorter maximum passages reduce buffering delay but create more API requests; Groq applies a minimum billed duration to each request.
+- **Stop takes too long:** use Cancel pending. Completed text stays saved and skipped passages get explicit markers.
+- **Cannot save notes:** keep the app open, resolve disk space or folder access, then select Save again. The notes folder contains both JSON and TXT copies.
+- **YouTube blocks a public video:** region restrictions, removed videos, and automated-download challenges can prevent extraction. Wyspa does not bypass login/challenges or use browser cookies. Use Audio Files for an audio file you already have.
+- **Speaker/video tools missing:** reinstall the complete v7 package. For development run `python scripts/prepare-v7-tools.py` before publishing.

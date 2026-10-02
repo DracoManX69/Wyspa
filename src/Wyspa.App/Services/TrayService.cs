@@ -34,6 +34,7 @@ public sealed class TrayService : IDisposable
         menu.Items.Add(_toggleItem);
         menu.Items.Add(_autoCaptureItem);
         menu.Items.Add("Settings", null, (_, _) => showMainWindow());
+        menu.Items.Add("Conversation overlay", null, (_, _) => ((App)System.Windows.Application.Current).ShowNoteOverlay());
         menu.Items.Add(_startupItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Quit", null, async (_, _) => await _quitAsync());
@@ -84,7 +85,7 @@ public sealed class TrayService : IDisposable
 
     private void ViewModelOnPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(MainViewModel.Status) or nameof(MainViewModel.Settings) or nameof(MainViewModel.StartWithWindows) or nameof(MainViewModel.HasApiKey))
+        if (e.PropertyName is nameof(MainViewModel.Status) or nameof(MainViewModel.NoteCaptureActive) or nameof(MainViewModel.Settings) or nameof(MainViewModel.StartWithWindows) or nameof(MainViewModel.HasApiKey))
         {
             UpdateTrayState();
         }
@@ -102,15 +103,17 @@ public sealed class TrayService : IDisposable
 
     private void UpdateTrayState()
     {
-        var isRecording = _viewModel.Status is DictationState.Listening;
+        var notesActive = _viewModel.Notes is { IsActive: true };
+        var notesPaused = _viewModel.Notes is { IsActive: true, IsPaused: true };
+        var isRecording = _viewModel.Status is DictationState.Listening || (notesActive && !notesPaused);
         var isAutoMode = _viewModel.IsAutoCaptureMode;
         var isAutoListening = _viewModel.IsAutoCaptureListening;
 
         _toggleItem.Text = isRecording ? "Stop Listening" : "Start Listening";
-        _toggleItem.Enabled = _viewModel.HasApiKey && (!isAutoMode || isRecording);
+        _toggleItem.Enabled = _viewModel.CanListen && (!isAutoMode || isRecording);
 
         _autoCaptureItem.Visible = isAutoMode;
-        _autoCaptureItem.Enabled = _viewModel.HasApiKey;
+        _autoCaptureItem.Enabled = _viewModel.CanListen;
         _autoCaptureItem.Checked = isAutoListening;
         _autoCaptureItem.Text = isAutoListening ? "AutoCapture listening: On" : "AutoCapture listening: Off";
 
@@ -118,7 +121,7 @@ public sealed class TrayService : IDisposable
         _startupItem.Checked = _viewModel.StartWithWindows;
         _updatingStartupItem = false;
 
-        var text = isRecording
+        var text = notesPaused ? "Wyspa - Notes paused" : isRecording
             ? "Wyspa - Recording"
             : isAutoListening
                 ? "Wyspa - AutoCapture listening"

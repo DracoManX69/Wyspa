@@ -38,6 +38,13 @@ public sealed class AppSettings
     public WakeVoiceProfile? AutoCaptureWakeVoiceProfile { get; set; }
     public bool WakeToneEnabled { get; set; } = true;
     public string? WakeTonePath { get; set; }
+    public ConversationMode NoteMode { get; set; } = ConversationMode.ComputerCall;
+    public CallAudioMode NoteAudioMode { get; set; } = CallAudioMode.OutputDevice;
+    public string? NoteOutputDeviceId { get; set; }
+    public string SummaryModelId { get; set; } = "openai/gpt-oss-20b";
+    public double NoteChunkSeconds { get; set; } = 3.5;
+    public float NoteSpeechThreshold { get; set; } = .008f;
+    public double SpeakerMatchThreshold { get; set; } = .55;
 
     public string GetWritingCleanupPrompt() => WritingCleanupTone switch
     {

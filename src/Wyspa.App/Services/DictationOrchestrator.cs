@@ -15,6 +15,19 @@ public sealed class DictationOrchestrator
     private readonly IKeyboardCommandService _keyboardCommand;
     private readonly OverlayStatusService _overlay;
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private bool _reservedForNotes;
+
+    public async Task ReserveForNotesAsync(bool reserved)
+    {
+        await _gate.WaitAsync();
+        try
+        {
+            if (reserved && _audioCapture.IsRecording)
+                throw new InvalidOperationException("Finish the current dictation or scratchpad recording before starting notes.");
+            _reservedForNotes = reserved;
+        }
+        finally { _gate.Release(); }
+    }
 
     public DictationState State { get; private set; } = DictationState.Idle;
     public event EventHandler? ListeningStarting;
@@ -102,6 +115,7 @@ public sealed class DictationOrchestrator
 
     private async Task StartAsync(CancellationToken cancellationToken)
     {
+        if (_reservedForNotes) return;
         var settings = await _settingsService.LoadAsync(cancellationToken);
         var apiKey = await _secretStore.GetApiKeyAsync(cancellationToken);
         if (string.IsNullOrWhiteSpace(apiKey))

@@ -11,6 +11,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Wyspa.Core\Wyspa.Core.csproj" />
     <Compile Include="..\..\src\Wyspa.App\ViewModels\FileTranscriptionViewModel.cs" Link="FileTranscriptionViewModel.cs" />
+    <Compile Include="..\..\src\Wyspa.App\ViewModels\NotesViewModel.cs" Link="NotesViewModel.cs" />
+    <Compile Include="..\..\src\Wyspa.App\ViewModels\GroqModelsViewModel.cs" Link="GroqModelsViewModel.cs" />
     <Compile Include="..\..\src\Wyspa.App\ViewModels\ViewModelBase.cs" Link="ViewModelBase.cs" />
     <Compile Include="..\..\src\Wyspa.App\ViewModels\AsyncRelayCommand.cs" Link="AsyncRelayCommand.cs" />
     <Content Include="..\..\src\Wyspa.App\Tools\Flac\flac.exe" Link="Tools\Flac\flac.exe" CopyToOutputDirectory="PreserveNewest" />

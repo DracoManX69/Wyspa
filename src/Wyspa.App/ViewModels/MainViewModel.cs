@@ -84,10 +84,12 @@ public sealed class MainViewModel : ViewModelBase
         _updateService = updateService;
         _mediaControlService = mediaControlService;
         Settings = new AppSettings();
+        Models = new GroqModelsViewModel(groqClient, () => Settings);
         Devices = [];
         SaveCommand = new AsyncRelayCommand(SaveHotkeyAsync);
         SaveAutoCaptureHotkeyCommand = new AsyncRelayCommand(SaveAutoCaptureHotkeyAsync);
         TestConnectionCommand = new AsyncRelayCommand(TestConnectionAsync);
+        RefreshModelsCommand = new AsyncRelayCommand(RefreshModelsAsync);
         ToggleListeningCommand = new AsyncRelayCommand(ToggleListeningAsync);
         RemoveKeyCommand = new AsyncRelayCommand(RemoveKeyAsync);
         RefreshDevicesCommand = new AsyncRelayCommand(LoadDevicesAsync);
@@ -96,7 +98,6 @@ public sealed class MainViewModel : ViewModelBase
         ResetWakeVoiceCommand = new AsyncRelayCommand(ResetWakeVoiceTrainingAsync);
         CheckForUpdatesCommand = new AsyncRelayCommand(CheckForUpdatesAsync);
         OpenUpdateCommand = new RelayCommand(_ => OpenUpdate(), _ => IsUpdateAvailable && !string.IsNullOrWhiteSpace(UpdateUrl));
-        ClearHistoryCommand = new RelayCommand(_ => ConnectionMessage = "History is off by default. Nothing was cleared.");
         _orchestrator.StateChanged += (_, state) => RunOnUi(() => Status = state);
         _audioCapture.LevelAvailable += (_, level) => UpdateMicrophoneLevel(level);
         _levelMonitor.AudioAvailable += OnWakeVoiceAudioAvailable;
@@ -109,11 +110,39 @@ public sealed class MainViewModel : ViewModelBase
     public event EventHandler? StartupSettingChanged;
 
     public AppSettings Settings { get; private set; }
+    public GroqModelsViewModel Models { get; }
+    public NotesViewModel Videos { get; set; } = null!;
     public FileTranscriptionViewModel FileTranscription { get; set; } = null!;
+    private NotesViewModel? _notes;
+    public NotesViewModel Notes
+    {
+        get => _notes!;
+        set
+        {
+            _notes = value;
+            value.PropertyChanged += (_, args) =>
+            {
+                if (args.PropertyName is nameof(NotesViewModel.IsActive) or nameof(NotesViewModel.IsPaused)) OnPropertyChanged(nameof(NoteCaptureActive));
+            };
+            OnPropertyChanged();
+        }
+    }
+    private bool _noteCaptureActive;
+    public bool NoteCaptureActive
+    {
+        get => _noteCaptureActive;
+        set { SetProperty(ref _noteCaptureActive, value); OnPropertyChanged(nameof(CanListen)); OnPropertyChanged(nameof(IsAutoCaptureListening)); }
+    }
+    public async Task SetNoteCaptureActiveAsync(bool active)
+    {
+        NoteCaptureActive = active;
+        await ApplyAutoCaptureMediaBehaviorAsync(IsAutoCaptureListening, force: true);
+    }
     public ObservableCollection<AudioDeviceInfo> Devices { get; }
     public ICommand SaveCommand { get; }
     public ICommand SaveAutoCaptureHotkeyCommand { get; }
     public ICommand TestConnectionCommand { get; }
+    public ICommand RefreshModelsCommand { get; }
     public ICommand ToggleListeningCommand { get; }
     public ICommand ScratchpadCommand { get; }
     public ICommand RecordWakeVoiceCommand { get; }
@@ -122,7 +151,6 @@ public sealed class MainViewModel : ViewModelBase
     public ICommand OpenUpdateCommand { get; }
     public ICommand RemoveKeyCommand { get; }
     public ICommand RefreshDevicesCommand { get; }
-    public ICommand ClearHistoryCommand { get; }
 
     public string ApiKey
     {
@@ -289,9 +317,9 @@ public sealed class MainViewModel : ViewModelBase
     public string WakeToneText => string.IsNullOrWhiteSpace(Settings.WakeTonePath) ? "Default tone" : Settings.WakeTonePath;
     public string MicrophoneLevelText => $"Live input {MicrophoneLevel:P0}";
     public string AppVersionText => $"Current Version {GetCurrentVersionText()}";
-    public bool CanListen => HasApiKey;
+    public bool CanListen => HasApiKey && !NoteCaptureActive;
     public bool IsAutoCaptureMode => Settings.ActivationMode is ActivationMode.AutoCapture;
-    public bool IsAutoCaptureListening => HasApiKey && IsAutoCaptureMode && Settings.AutoCaptureListeningEnabled;
+    public bool IsAutoCaptureListening => HasApiKey && !NoteCaptureActive && IsAutoCaptureMode && Settings.AutoCaptureListeningEnabled;
     public bool IsWakeVoiceSettingsEnabled => Settings.AutoCaptureWakeVoiceEnabled;
     public bool IsWritingCleanupSettingsEnabled => Settings.GroqWritingCleanupEnabled;
     public bool IsIntentSettingsEnabled => Settings.IntentActionsEnabled;
@@ -328,6 +356,7 @@ public sealed class MainViewModel : ViewModelBase
 
     public async Task ToggleListeningAsync()
     {
+        if (NoteCaptureActive) return;
         if (!await EnsureApiKeyAvailableAsync())
         {
             return;
@@ -338,6 +367,7 @@ public sealed class MainViewModel : ViewModelBase
 
     public async Task HandleHotkeyPressedAsync()
     {
+        if (NoteCaptureActive) return;
         if (!await EnsureApiKeyAvailableAsync())
         {
             return;
@@ -361,6 +391,7 @@ public sealed class MainViewModel : ViewModelBase
 
     public async Task HandleHotkeyReleasedAsync()
     {
+        if (NoteCaptureActive) return;
         if (!await EnsureApiKeyAvailableAsync())
         {
             return;
@@ -374,6 +405,7 @@ public sealed class MainViewModel : ViewModelBase
 
     public async Task ToggleAutoCaptureListeningAsync()
     {
+        if (NoteCaptureActive) return;
         if (!await EnsureApiKeyAvailableAsync())
         {
             Settings.AutoCaptureListeningEnabled = false;
@@ -440,6 +472,7 @@ public sealed class MainViewModel : ViewModelBase
 
     private async Task ToggleScratchpadAsync()
     {
+        if (NoteCaptureActive) { ScratchpadStatus = "Stop the notetaker session before using dictation."; return; }
         if (IsScratchpadRecording)
         {
             await StopScratchpadAsync();
@@ -557,6 +590,7 @@ public sealed class MainViewModel : ViewModelBase
 
     private async Task ToggleWakeVoiceRecordingAsync()
     {
+        if (NoteCaptureActive) { WakeVoiceStatus = "Stop the notetaker session before training your wake voice."; return; }
         if (IsWakeVoiceRecording)
         {
             await StopWakeVoiceRecordingAsync(saveProfile: true);
@@ -924,6 +958,7 @@ public sealed class MainViewModel : ViewModelBase
 
     private async Task TestConnectionAsync()
     {
+        if (Models.IsRefreshing) return;
         var key = ApiKey.Trim();
         if (string.IsNullOrWhiteSpace(key))
         {
@@ -937,7 +972,7 @@ public sealed class MainViewModel : ViewModelBase
         }
 
         ConnectionMessage = "Testing Groq connection...";
-        var result = await _groqClient.TestConnectionAsync(key, CancellationToken.None);
+        var result = await Models.RefreshAsync(key);
         ConnectionMessage = result.UserMessage;
         if (result.Success)
         {
@@ -951,13 +986,20 @@ public sealed class MainViewModel : ViewModelBase
         }
     }
 
+    public async Task RefreshModelsAsync()
+    {
+        await Models.RefreshAsync(await _secretStore.GetApiKeyAsync(CancellationToken.None) ?? "");
+    }
+
     private async Task RemoveKeyAsync()
     {
+        if (Models.IsRefreshing) return;
         await FileTranscription.StopAsync();
         await _orchestrator.StopIfNeededAsync();
         await _secretStore.RemoveApiKeyAsync(CancellationToken.None);
         HasApiKey = false;
         ApiKey = string.Empty;
+        Models.Clear();
         Settings.AutoCaptureListeningEnabled = false;
         await ApplyAutoCaptureMediaBehaviorAsync(isListening: false, force: true);
         await _settingsService.SaveAsync(Settings, CancellationToken.None);

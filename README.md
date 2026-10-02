@@ -8,6 +8,21 @@ Wyspa is designed for people who want fast speech-to-text without a heavyweight 
 
 Wyspa was written effectively entirely by Codex with some cleaver interfacing with the app to get it to work pretty well. This vibe code disclosure is basically the only thing human authored. Codex did the rest of this repo too :)
 
+## New in 0.7.0
+
+- **YouTube**: paste a public or unlisted single-video URL (including Shorts and completed broadcasts). Wyspa downloads its audio, splits long recordings into five-minute parts, transcribes with your saved Groq key, and saves the text. No playlists or signed-in videos.
+- **Conversation**: choose Computer call or In-person. Calls label your microphone as You and the other source as Other side; choose an output device or, on supported Windows versions, a calling app and its child processes.
+- **Live notes overlay**: movable, resizable, always on top, with Start, Pause/Resume, Stop, and Summarise. Messages appear as responses arrive and are ordered using speech timestamps. Your messages appear on the right.
+- **Room speaker identification (experimental)**: bundled local models identify anonymous voices across short audio windows. Choose My room speaker to put your messages on the right. Adjust speaker matching and speech sensitivity in Conversation settings. Speaker labels can be wrong on short, noisy, or overlapping speech; uncertain speech is explicitly labelled.
+- **Summaries**: use the existing saved Groq key and the summary model selected in Settings → Groq (default `openai/gpt-oss-20b`). Long conversations are summarised in parts and combined without silently dropping the end. Summarise while recording to capture the transcript available at that time, or after Stop for the finished session.
+- **Persistent notes**: conversations appear in Saved conversations and YouTube imports in Saved videos and are written to `%AppData%\Wyspa\Notes` as JSON and readable TXT copies. Audio is temporary and removed after processing, cancellation, or failure. The dictation audio-retention setting does not control conversation or YouTube notes.
+
+**Windows compatibility:** device audio capture works on Windows 10. Per-app audio capture requires build 20348 or newer (Windows 11 recommended); Windows 10 build 19045 does not provide this API. Wyspa explains this in Settings → Conversation and keeps device capture available. Browser capture selects the browser process tree, not one individual tab.
+
+To try it: select your microphone in Settings → Audio & capture and choose the conversation type and source in Settings → Conversation, then open Conversation and select Start. Open Floating overlay if wanted. Pause stops both sources while queued speech finishes; Stop finishes and saves the session. Cancel pending skips unfinished requests and marks the gaps. Closing the overlay leaves the session running; reopen it from the tray. Dictation and AutoCapture are suspended for the session, including while paused, and restored afterward.
+
+For YouTube, paste a video URL and select Transcribe video. Completed passages survive cancellation or later failures. YouTube may reject an otherwise public link because of a regional restriction or automated-download challenge; Wyspa reports the error without trying to use browser cookies or login sessions.
+
 ## Features
 
 - Windows tray app with compact settings UI.
@@ -40,14 +55,15 @@ For development:
 
 - .NET 10 SDK.
 - PowerShell.
+- Python 3.11+ once at build time to prepare the pinned video tools and speaker models (`python scripts/prepare-v7-tools.py`). End users do not need Python.
 - Inno Setup 6 if you want to build the installer.
 
 ## Download And Install
 
-For a GitHub release, download:
+Download the [v0.7.0 Windows installer](https://github.com/DracoManX69/Wyspa/releases/download/v0.7.0/WyspaSetup-0.7.0-win-x64.exe) from the [GitHub release](https://github.com/DracoManX69/Wyspa/releases/tag/v0.7.0):
 
 ```text
-WyspaSetup-0.6.1-win-x64.exe
+WyspaSetup-0.7.0-win-x64.exe
 ```
 
 Run the installer and follow the wizard. The installer places Wyspa in your user profile by default, offers Start Menu and desktop shortcut options, and registers Wyspa in Windows Apps & Features.
@@ -59,14 +75,24 @@ The installer checks for the .NET 10 Desktop Runtime x64. If it is missing, setu
 ## First Run
 
 1. Launch Wyspa.
-2. Open the Groq tab.
+2. Open Settings → Groq.
 3. Paste your Groq API key.
-4. Click Test connection.
-5. Choose your microphone in Input.
+4. Click Save and test key.
+5. Choose your microphone in Settings → Audio & capture.
 6. Set your preferred trigger mode and hotkey.
-7. Optional: in Input, choose whether AutoCapture should leave media alone, mute system output, or send play/pause while listening.
-8. Optional: enable Groq writing cleanup in Behavior and choose Formal, Casual, or Technical tone.
+7. Optional: in Settings → Audio & capture, choose whether AutoCapture should leave media alone, mute system output, or send play/pause while listening.
+8. Optional: enable Groq writing cleanup in Settings → Experimental and choose Formal, Casual, or Technical tone.
 9. Open the scratchpad or another text field and try a short dictation.
+
+## Settings and model discovery
+
+The sidebar has Home, Audio Files, Conversation, YouTube, and Settings. Settings groups the Groq connection with transcription and summary models, conversation capture, microphone and dictation capture, dictation behaviour, experimental features, privacy, and system preferences. Experimental contains Wake Voice, Tone Re-write and its model, and Spoken Actions and its model. System includes Overlay settings. Configuration changes save automatically; API keys and shortcuts have explicit save buttons.
+
+Settings → Groq loads the model list on first opening with a saved key. **Save and test key** also loads it, and **Refresh models** requests a fresh list without making an inference call. Speech-to-text choices are separate from the text models used for summaries, re-writing, and spoken action detection. The Refresh models button in Groq updates the selectors in both Groq and Experimental. The transcription and summary dropdowns in Groq and the re-write and spoken-action dropdowns in Experimental use the current active IDs returned by [Groq's models endpoint](https://console.groq.com/docs/models).
+
+Groq does not document task capabilities in that endpoint's response. Wyspa therefore classifies known model families and excludes speech generation, moderation, and unrecognised families. Supporting a new model family may require a compatibility update; refreshing discovers new IDs within recognised families. A failed refresh keeps the last list and saved choices. If a saved model disappears from the list, Wyspa shows a message and keeps the setting until you choose a replacement.
+
+Conversation and YouTube have independent selections, transcripts, summaries, errors, and saved-item lists. Existing JSON/TXT files stay in their original location and are filtered by their stored kind. Browsing or importing a video does not replace the conversation being recorded. The unused dictation History toggle and its no-op Clear History action have been removed; delete saved conversations and videos from their respective pages.
 
 ## Groq API Key
 
@@ -77,7 +103,7 @@ Wyspa uses your own Groq API key.
 3. Create an API key.
 4. Copy the key.
 5. Paste it into Wyspa Settings > Groq.
-6. Click Test connection.
+6. Click Save and test key.
 
 The API key is stored locally with Windows user protection. It is not stored in `settings.json`.
 
@@ -120,7 +146,7 @@ Create the Windows installer:
 This produces:
 
 ```text
-artifacts\installer\WyspaSetup-0.6.1-win-x64.exe
+artifacts\installer\WyspaSetup-0.7.0-win-x64.exe
 ```
 
 ## Release Files
@@ -128,7 +154,7 @@ artifacts\installer\WyspaSetup-0.6.1-win-x64.exe
 For a GitHub release, upload the installer:
 
 ```text
-artifacts\installer\WyspaSetup-0.6.1-win-x64.exe
+artifacts\installer\WyspaSetup-0.7.0-win-x64.exe
 ```
 
 Optional secondary asset:

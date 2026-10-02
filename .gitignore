@@ -1,6 +1,8 @@
 bin/
 obj/
 artifacts/
+src/Wyspa.App/Tools/Video/
+src/Wyspa.App/Tools/Speakers/
 .vs/
 .dotnet/
 .dotnet-install/

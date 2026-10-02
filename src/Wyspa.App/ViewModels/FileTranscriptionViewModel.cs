@@ -94,7 +94,7 @@ public sealed class FileTranscriptionViewModel : ViewModelBase
             var key = await _secrets.GetApiKeyAsync(token);
             if (string.IsNullOrWhiteSpace(key))
             {
-                Status = "Add and test your API key in the Groq section first.";
+                Status = "Add and test your API key in Settings → Groq first.";
                 return;
             }
             var settings = _settings();

@@ -29,6 +29,8 @@ public partial class App : System.Windows.Application
     private WindowsAutoCaptureMediaControlService? _mediaControlService;
     private HttpClient? _httpClient;
     private HttpClient? _fileHttpClient;
+    private HttpClient? _notesHttpClient;
+    private NoteOverlayWindow? _notesOverlay;
     private bool _isQuitting;
 
     public App()
@@ -148,6 +150,42 @@ public partial class App : System.Windows.Application
 
             await _viewModel.InitializeAsync();
             await _autoCaptureService.RefreshAsync();
+            _notesHttpClient = new HttpClient();
+            _viewModel.Notes = new NotesViewModel(
+                new ConversationCapture(() => _viewModel.Settings),
+                new LocalSpeakerIdentifier(System.IO.Path.Combine(AppContext.BaseDirectory, "Tools", "Speakers"), () => _viewModel.Settings.SpeakerMatchThreshold),
+                new GroqNoteIntelligence(_notesHttpClient), secretStore, new NoteStore(),
+                new VideoImporter(System.IO.Path.Combine(AppContext.BaseDirectory, "Tools", "Video")),
+                () => _viewModel.Settings,
+                action => Dispatcher.InvokeAsync(action).Task.Unwrap(),
+                async reserved =>
+                {
+                    if (reserved && _viewModel.IsWakeVoiceRecording)
+                        throw new InvalidOperationException("Finish wake-voice training before starting notes.");
+                    _autoCaptureService.Suspended = reserved;
+                    try
+                    {
+                        await orchestrator.ReserveForNotesAsync(reserved);
+                        await _viewModel.SetNoteCaptureActiveAsync(reserved);
+                        await _autoCaptureService.ApplySettingsAsync(_viewModel.Settings, _viewModel.HasApiKey);
+                    }
+                    catch
+                    {
+                        _autoCaptureService.Suspended = false;
+                        _viewModel.NoteCaptureActive = false;
+                        await orchestrator.ReserveForNotesAsync(false);
+                        throw;
+                    }
+                }, () => _viewModel.AutoSaveSettingsAsync());
+            await _viewModel.Notes.RefreshAsync();
+            _viewModel.Videos = new NotesViewModel(
+                new ConversationCapture(() => _viewModel.Settings),
+                new LocalSpeakerIdentifier(System.IO.Path.Combine(AppContext.BaseDirectory, "Tools", "Speakers"), () => _viewModel.Settings.SpeakerMatchThreshold),
+                new GroqNoteIntelligence(_notesHttpClient), secretStore, new NoteStore(),
+                new VideoImporter(System.IO.Path.Combine(AppContext.BaseDirectory, "Tools", "Video")),
+                () => _viewModel.Settings, action => Dispatcher.InvokeAsync(action).Task.Unwrap(),
+                _ => Task.CompletedTask, () => _viewModel.AutoSaveSettingsAsync(), NoteLibrary.YouTube);
+            await _viewModel.Videos.RefreshAsync();
 
             var launchMinimized = e.Args.Any(arg => string.Equals(arg, "--minimized", StringComparison.OrdinalIgnoreCase)) ||
                 _viewModel.Settings.StartMinimized;
@@ -221,13 +259,27 @@ public partial class App : System.Windows.Application
 
     private async Task QuitAsync()
     {
+        if (_isQuitting) return;
         _isQuitting = true;
         if (_viewModel is not null)
         {
+            await _viewModel.Notes.ShutdownAsync();
+            await _viewModel.Videos.ShutdownAsync();
             await _viewModel.StopIfNeededAsync();
         }
 
         Shutdown();
+    }
+
+    public void ShowNoteOverlay()
+    {
+        if (_viewModel is null) return;
+        if (_notesOverlay is null)
+        {
+            _notesOverlay = new NoteOverlayWindow { DataContext = _viewModel.Notes };
+            _notesOverlay.Closed += (_, _) => _notesOverlay = null;
+        }
+        _notesOverlay.Show();
     }
 
     protected override async void OnExit(ExitEventArgs e)
@@ -235,6 +287,7 @@ public partial class App : System.Windows.Application
         _trayService?.Dispose();
         _viewModel?.FileTranscription.Cancel();
         _fileHttpClient?.Dispose();
+        _notesHttpClient?.Dispose();
         _hotkeyService?.Dispose();
         _autoCaptureHotkeyService?.Dispose();
         if (_mediaControlService is not null)
