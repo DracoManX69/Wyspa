@@ -8,6 +8,21 @@ namespace Wyspa.Tests;
 public sealed class NotesViewModelTests
 {
     [Fact]
+    public async Task CancellingFirstUseModelPreparationLeavesMicrophoneInactive_AndCanRetry()
+    {
+        using var setup = new Setup(); setup.Settings.NoteMode = ConversationMode.InPerson;
+        var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        setup.Speakers.Prepare = async token => { ready.TrySetResult(); await Task.Delay(Timeout.Infinite, token); };
+        var start = setup.Vm.StartAsync();
+        await ready.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.True(setup.Vm.CancelPendingCommand.CanExecute(null)); Assert.False(setup.Capture.Running); Assert.False(setup.Reserved);
+        setup.Vm.CancelPendingCommand.Execute(null);
+        await start.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.False(setup.Vm.IsActive); Assert.Empty(setup.Vm.Notes); Assert.Contains("cancelled", setup.Vm.Error);
+        setup.Speakers.Prepare = _ => Task.CompletedTask;
+        await setup.Vm.StartAsync(); Assert.True(setup.Vm.IsActive); await setup.Vm.StopAsync();
+    }
+    [Fact]
     public async Task CancelPendingMarksGapsAndReleasesAudioAndMicrophone()
     {
         using var setup = new Setup();
@@ -184,7 +199,8 @@ public sealed class NotesViewModelTests
     private sealed class Speakers : ISpeakerIdentifier
     {
         public Task<IReadOnlyList<SpeakerTurn>> Result { get; set; } = Task.FromResult<IReadOnlyList<SpeakerTurn>>([]);
-        public Task InitializeAsync(CancellationToken token) => Task.CompletedTask;
+        public Func<CancellationToken, Task> Prepare { get; set; } = _ => Task.CompletedTask;
+        public Task InitializeAsync(CancellationToken token, IProgress<string>? progress = null) => Prepare(token);
         public Task<IReadOnlyList<SpeakerTurn>> IdentifyAsync(float[] samples, CancellationToken token) => Result;
         public void Reset() { }
         public void Dispose() { }

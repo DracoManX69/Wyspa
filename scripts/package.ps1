@@ -9,6 +9,7 @@ param(
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
+& (Join-Path $PSScriptRoot "prepare-local-model.ps1")
 
 $selfContainedValue = if ($SelfContained) { "true" } else { "false" }
 $singleFileValue = if ($SingleFile -or $SelfContained) { "true" } else { "false" }
@@ -82,7 +83,7 @@ function Set-AppHostRelativePath {
     [System.IO.File]::WriteAllBytes($ExePath, $bytes)
 }
 
-foreach ($requiredTool in @("Tools\Video\yt-dlp.exe", "Tools\Video\ffmpeg.exe", "Tools\Video\deno.exe", "Tools\Speakers\segmentation.onnx", "Tools\Speakers\embedding.onnx")) {
+foreach ($requiredTool in @("Tools\Video\yt-dlp.exe", "Tools\Video\ffmpeg.exe")) {
     if (-not (Test-Path (Join-Path "src\Wyspa.App" $requiredTool))) {
         throw "Missing bundled dependency: $requiredTool. Run python scripts/prepare-v7-tools.py before packaging."
     }
@@ -99,6 +100,15 @@ dotnet publish .\src\Wyspa.App\Wyspa.App.csproj `
 
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed." }
 
+}
+
+# Runtime packages also carry other OS/architecture binaries. This installer is win-x64.
+$runtimePath = Join-Path $Output "runtimes"
+if (Test-Path $runtimePath) {
+    Get-ChildItem $runtimePath -Directory -Recurse |
+        Where-Object { $_.Name -match '^(linux-|osx-|android-|ios-|maccatalyst-|tvos-|win-arm64$|win-x86$)' } |
+        Sort-Object { $_.FullName.Length } -Descending |
+        ForEach-Object { if (Test-Path $_.FullName) { Remove-Item $_.FullName -Recurse -Force } }
 }
 
 if (-not $SelfContained -and -not $SingleFile) {

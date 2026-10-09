@@ -1,10 +1,15 @@
 #define AppName "Wyspa"
-#define AppVersion "0.9.4"
-#define AppVersionInfo "0.9.4.0"
+#define AppVersion "0.9.5"
+#define AppVersionInfo "0.9.5.0"
 #define AppPublisher "Wyspa"
 #define AppExeName "Wyspa.exe"
 #ifndef PublishDir
 #define PublishDir "..\artifacts\publish\win-x64"
+#endif
+
+; Installer builds use the shared .NET runtime, downloaded only if missing.
+#if FileExists(PublishDir + "\coreclr.dll") || FileExists(PublishDir + "\Data\coreclr.dll")
+#error Do not package a self-contained .NET runtime in this installer. Use scripts/package.ps1 without -SelfContained.
 #endif
 
 [Setup]
@@ -45,6 +50,7 @@ Name: "startmenu"; Description: "Create a Start Menu shortcut"; GroupDescription
 [Files]
 Source: "{#PublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "runtime-prerequisite.ps1"; Flags: dontcopy
+Source: "cpp-prerequisite.ps1"; Flags: dontcopy
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\{#AppExeName}"; Tasks: startmenu

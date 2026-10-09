@@ -85,3 +85,48 @@ Automated evidence for this build is recorded separately in `docs/V7_VALIDATION.
 - Check hints on settings controls, including disabled Stream Fix and experimental controls. Important prerequisites should also remain in inline text; tips should wrap instead of extending beyond the window.
 - In Light, Dark and System, confirm the header/navigation have no fixed green tint. Windows accent still controls selection and primary controls; the app icon and semantic waveform colours remain distinct.
 - Check tooltip placement and keyboard focus at increased DPI, on multiple displays, and with a screen reader.
+
+
+## Ranked comparisons, wake practice and the single shortcut
+
+- Compare Models: all installed CPU variants and supported GPU variants appear; successful scores sort descending at completion, with one highlighted winner. Failed rows show no score. Headers/buttons are centered, About icons open the expected model card, and narrow-window horizontal scrollbars remain reachable.
+- Compare with Groq stays disabled before a completed current local comparison or without a key. After comparison, only the top local result and Groq appear; prior local backend measurements remain saved. Verify cancellation, stale hardware/preferences and model removal do not use invalid winner evidence.
+- SmartListen only: Enable wake phrases and Practice are unavailable in Toggle/Hold to Talk. Enter an English phrase, follow Personal wake setup through all 14 steps, and confirm automatic sensitivity/enabling only after the four fresh checks pass. Cancel and resume a reading, change input mode mid-reading, edit the phrase, change microphones and restart setup.
+- Physical microphone acceptance: say the phrase, confirm indicator/tone and dictation start, finish with silence, then repeat later. Test accent, distance, room noise and near-sounding ordinary speech over prolonged monitoring; thresholds are not acoustic fine-tuning or a accuracy guarantee.
+- While practice owns the microphone, scroll Settings and change an unrelated preference: input preview/settings refresh must not stop that recording or issue media commands.
+- One saved shortcut: Toggle press starts/stops; Hold to Talk records only while held; SmartListen press enables/disables monitoring. Confirm no secondary shortcut remains registered. Recording a new shortcut in Settings must not trigger the old shortcut.
+- Media Handling: Settings saves, comparison/practice reservations, manual test recordings and tray/manual listening toggles leave playback alone. Hotkey sessions apply the selected action and restore once when their owned capture/listening ends. Already-paused players must remain paused; only previously-playing sessions paused by Wyspa may resume. Check supported players, player closure/user playback changes during dictation and a disconnected output device; unsupported players must not receive blind play/pause commands.
+- Clean-machine install/upgrade/uninstall and physical hotkey/media-player interaction remain separate acceptance checks from the fake-service UI harness.
+
+
+## Wake endpoint regression
+
+- Set the SmartListen threshold to zero. Wake dictation must still finish after the configured silence interval, transcribe, and rearm; digital silence must never reset the silence clock.
+- Repeat with background hum/clicks and no further audio callbacks. PCM capture uses speech activity instead of peak loudness. Validate microphone disconnect/error handling and resource use over prolonged monitoring.
+- Switch Toggle/Hold/SmartListen and confirm only SmartListen shows its threshold, preview meter, silence and enabled controls; verify the exact mode-specific hotkey labels.
+- Verify hey whisper and a custom English phrase against near phrases, TV/music voices, accent, distance and room noise on real microphone audio. Synthesized fixtures do not prove unattended false-trigger performance or brand-assistant parity.
+
+
+## Personal wake enrollment acceptance
+
+- Use the actual microphone: room check, natural/softer phrase, usual working position, natural pace, request sentence, everyday sentence, near phrase and final word alone. Verify heard-text/retry feedback for quiet/clipped audio and that a failed fresh check does not advance or activate personalization.
+- Close/reopen during setup and confirm completed samples resume with the same phrase/input. Change the input device or phrase and confirm incompatible personalization is not applied. Restart and check profile deletion.
+- Complete fresh positive and negative checks, then test new recordings at realistic volume/distance with independent sentences. Say the phrase, wait for the tone, dictate, stop speaking and confirm transcription/rearming at the configured silence interval.
+- Measure false activations over several hours with conversation, music/TV and speaker echo; record missed triggers and response latency across accents/microphones. Enrollment checks and synthesized fixtures alone do not establish Alexa-level reliability.
+- Confirm no raw wake recordings on disk, no wake-audio network upload and no media pause/resume from setup recordings. Derived pronunciation features and sample text are retained locally as documented in PRIVACY.md.
+
+
+## Personal wake popup and adaptive matching
+
+- Open the setup button in SmartListen. Verify introduction, editable phrase validation, focused sample prompts and completion; keyboard Enter/Escape, native title-bar close, light/dark themes and a 420-unit-wide window. Primary actions must remain reachable while sample content scrolls.
+- Say the phrase with your usual accent; do not change pronunciation to satisfy the transcript. Try a consistent whisba/whispa pronunciation. Repeated variants should be learned, shown at completion and used by the live keyword decoder. Ordinary and near-match examples must still stay quiet.
+- Miss a fresh positive check and cause a negative false trigger. Confirm strictness adjusts automatically, the failed clip becomes teaching evidence and all four checks restart with new recordings. A failed/unresolved profile must not be marked validated. Pause/reopen after an adjustment and verify the learned evidence and strictness resume.
+- While the wizard is open between recordings, use the global hotkey and say the wake phrase: normal dictation/media handling must remain reserved. Close during recording and preparation; verify capture stops, active audio is discarded, completed examples remain and normal listening can resume. Switch the selected microphone before reopening; incompatible profiles must start a fresh introduction.
+
+
+## Varied suite and short-window verification
+
+- Confirm wake/non-wake prompts alternate and only three training readings require the phrase alone. Retry/restart should vary sentence content; reopening pending setup should preserve the sentence-family seed. Completed older profiles should remain usable, while old incomplete sequences restart clearly.
+- Speak a sample then pause. It should finish without clicking Finish when voice separates from room sound. Test quieter voice, mid-sentence pauses and music; the manual Finish action and recording time cap remain available.
+- Say the phrase alone and before a request at different rates. Check accepted-word verification with the short path, full-window fallback and limited additional-audio retry. Confirm near phrases and isolated words stay quiet. Repeat custom phrases and learned variants.
+- Actual dictation still begins at the ready cue and uses the selected transcription provider/model. This change does not claim lossless immediate-request handoff before that cue or real-microphone Alexa parity.

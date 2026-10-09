@@ -81,6 +81,7 @@ public sealed class DictationOrchestrator
         await _gate.WaitAsync(cancellationToken);
         try
         {
+            if (_reservedForNotes) return;
             if (_audioCapture.IsRecording) finish = await StopUnderGateAsync(cancellationToken);
             else await StartAsync(cancellationToken);
         }
@@ -99,7 +100,7 @@ public sealed class DictationOrchestrator
     {
         Task finish = Task.CompletedTask;
         await _gate.WaitAsync(cancellationToken);
-        try { if (_audioCapture.IsRecording) finish = await StopUnderGateAsync(cancellationToken); }
+        try { if (!_reservedForNotes && _audioCapture.IsRecording) finish = await StopUnderGateAsync(cancellationToken); }
         finally { _gate.Release(); }
         await finish;
     }
@@ -145,8 +146,8 @@ public sealed class DictationOrchestrator
     {
         if (_reservedForNotes || _draining > 0) return;
         var settings = await _settingsService.LoadAsync(cancellationToken);
-        var apiKey = await _secretStore.GetApiKeyAsync(cancellationToken);
-        if (string.IsNullOrWhiteSpace(apiKey))
+        var apiKey = await _secretStore.GetApiKeyAsync(cancellationToken) ?? "";
+        if (!settings.UseLocalTranscription && string.IsNullOrWhiteSpace(apiKey))
         {
             SetState(DictationState.Error, "Add your Groq API key before listening.");
             return;
@@ -162,7 +163,7 @@ public sealed class DictationOrchestrator
                     throw new InvalidOperationException("This capture device does not support Stream Mode.");
                 var run = new StreamRun(settings, apiKey, _streamQueue);
                 run.Session = new StreamingDictationSession(_groqClient, apiKey,
-                    new TranscriptionOptions(settings.ModelId, settings.Language, settings.CustomPrompt), async (delta, cumulative, token) =>
+                    new TranscriptionOptions(settings.ModelId, settings.Language, settings.CustomPrompt, UseLocal: settings.UseLocalTranscription, LocalModelId: settings.LocalModelId), async (delta, cumulative, token) =>
                     {
                         if (!await insertion.AppendStreamAsync(delta, cumulative, token)) run.ClipboardOnly = true;
                     });
@@ -213,7 +214,7 @@ public sealed class DictationOrchestrator
         try
         {
             await BeginOutputAsync(run, token);
-            var delay = StreamingCadence.Interval;
+            var delay = run.Session.IsContinuousLocal ? TimeSpan.FromMilliseconds(100) : StreamingCadence.Interval;
             while (true)
             {
                 await Task.Delay(delay, token);
@@ -222,7 +223,7 @@ public sealed class DictationOrchestrator
                 RefreshStreamStatus();
                 try { await run.Session.ProcessAsync(stopped: false, token); }
                 finally { run.Busy = false; RefreshStreamStatus(); }
-                delay = StreamingCadence.After(Stopwatch.GetElapsedTime(started));
+                delay = run.Session.IsContinuousLocal ? TimeSpan.FromMilliseconds(100) : StreamingCadence.After(Stopwatch.GetElapsedTime(started));
             }
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
@@ -243,7 +244,7 @@ public sealed class DictationOrchestrator
             if (captureError is not null) throw captureError;
             await run.Session.ProcessAsync(stopped: true, token);
             var finalText = run.Session.Text;
-            if (run.Settings.StreamFixEnabled && !string.IsNullOrWhiteSpace(finalText))
+            if (!run.Settings.UseLocalTranscription && run.Settings.StreamFixEnabled && !string.IsNullOrWhiteSpace(finalText))
             {
                 try
                 {
@@ -261,7 +262,7 @@ public sealed class DictationOrchestrator
             {
                 _overlay.Show("Transcribing · delivering text", DictationState.Transcribing);
                 // Clipboard fallback is a normal backup, not a review or approval step.
-                await ((IStreamingTextInsertionService)_textInsertion).CompleteStreamAsync(finalText, run.Settings.StreamFixEnabled, token);
+                await ((IStreamingTextInsertionService)_textInsertion).CompleteStreamAsync(finalText, !run.Settings.UseLocalTranscription && run.Settings.StreamFixEnabled, token);
             }
         }
         catch (OperationCanceledException) { notice = "Cancelled · completed words on clipboard"; }
@@ -316,14 +317,15 @@ public sealed class DictationOrchestrator
             var recording = await _audioCapture.StopRecordingAsync(cancellationToken);
             _overlay.SetCaptureActive(false);
             recordingPath = recording.FilePath;
+            CaptureStopped?.Invoke(this, EventArgs.Empty);
             if (recording.LooksSilent)
             {
                 throw new InvalidOperationException("No clear microphone audio was detected. Check the selected microphone and Windows input level.");
             }
 
             var settings = await _settingsService.LoadAsync(cancellationToken);
-            var apiKey = await _secretStore.GetApiKeyAsync(cancellationToken);
-            if (string.IsNullOrWhiteSpace(apiKey))
+            var apiKey = await _secretStore.GetApiKeyAsync(cancellationToken) ?? "";
+            if (!settings.UseLocalTranscription && string.IsNullOrWhiteSpace(apiKey))
             {
                 throw new InvalidOperationException("Add your Groq API key in Settings before dictating.");
             }
@@ -331,7 +333,7 @@ public sealed class DictationOrchestrator
             var transcript = await _groqClient.TranscribeAsync(
                 apiKey,
                 recording.FilePath,
-                new TranscriptionOptions(settings.ModelId, settings.Language, settings.CustomPrompt),
+                new TranscriptionOptions(settings.ModelId, settings.Language, settings.CustomPrompt, UseLocal: settings.UseLocalTranscription, LocalModelId: settings.LocalModelId),
                 cancellationToken);
 
             var cleaned = settings.CleanupEnabled
@@ -351,7 +353,7 @@ public sealed class DictationOrchestrator
                 return;
             }
 
-            if (settings.IntentActionsEnabled)
+            if (!settings.UseLocalTranscription && settings.IntentActionsEnabled)
             {
                 SetState(DictationState.Transcribing, "Interpreting");
                 var intent = await _groqClient.InterpretIntentAsync(
@@ -382,7 +384,7 @@ public sealed class DictationOrchestrator
                 }
             }
 
-            if (settings.GroqWritingCleanupEnabled && !string.IsNullOrWhiteSpace(cleaned))
+            if (!settings.UseLocalTranscription && settings.GroqWritingCleanupEnabled && !string.IsNullOrWhiteSpace(cleaned))
             {
                 SetState(DictationState.Transcribing, "Polishing");
                 cleaned = await _groqClient.CleanupTranscriptAsync(
@@ -410,7 +412,7 @@ public sealed class DictationOrchestrator
             {
                 CompleteAndHide();
             }
-            else if (settings.IntentActionsEnabled)
+            else if (!settings.UseLocalTranscription && settings.IntentActionsEnabled)
             {
                 SetState(DictationState.Error, "Copied to clipboard");
             }

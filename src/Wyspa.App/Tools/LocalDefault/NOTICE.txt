@@ -1,0 +1,7 @@
+Zipformer English 20M streaming model
+Source: https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-en-20M-2023-02-17
+Revision: d42f2d9f7ca24806fb667456a18a9f1b60f70d16
+Model card license: Apache-2.0
+Original training: desh2608/icefall-asr-librispeech-pruned-transducer-stateless7-streaming-small
+Inference: sherpa-onnx, Next-gen Kaldi development team, Apache-2.0
+See LICENSE.txt.

@@ -31,7 +31,7 @@ public sealed class FileTranscriptionViewModel : ViewModelBase
     private Task? _activeTask;
     private AudioFileItem? _selectedFile;
     private bool _isBusy;
-    private string _status = "Choose audio files from your PC. Upload starts only when you click Transcribe.";
+    private string _status = "Choose audio files from your PC. Processing starts only when you click Transcribe.";
 
     public FileTranscriptionViewModel(IAudioFilePreparationService preparation, IGroqTranscriptionClient client,
         ISecretStore secrets, Func<AppSettings> settings)
@@ -63,7 +63,7 @@ public sealed class FileTranscriptionViewModel : ViewModelBase
                 Files.Add(new AudioFileItem(path));
         }
         SelectedFile ??= Files.FirstOrDefault();
-        Status = $"{Files.Count} file(s) selected. Ready to transcribe with your saved Groq connection.";
+        Status = $"{Files.Count} file(s) selected. Ready to transcribe with your selected transcription provider.";
         Refresh();
     }
 
@@ -91,14 +91,14 @@ public sealed class FileTranscriptionViewModel : ViewModelBase
         AudioFileItem? current = null;
         try
         {
-            var key = await _secrets.GetApiKeyAsync(token);
-            if (string.IsNullOrWhiteSpace(key))
+            var settings = _settings();
+            var key = await _secrets.GetApiKeyAsync(token) ?? "";
+            if (!settings.UseLocalTranscription && string.IsNullOrWhiteSpace(key))
             {
                 Status = "Add and test your API key in Settings → Groq first.";
                 return;
             }
-            var settings = _settings();
-            var options = new TranscriptionOptions(settings.ModelId, settings.Language, settings.CustomPrompt);
+            var options = new TranscriptionOptions(settings.ModelId, settings.Language, settings.CustomPrompt, UseLocal: settings.UseLocalTranscription, LocalModelId: settings.LocalModelId);
             var pending = Files.Where(f => !f.IsComplete).ToArray();
             var failed = 0;
             for (var index = 0; index < pending.Length; index++)
@@ -114,10 +114,12 @@ public sealed class FileTranscriptionViewModel : ViewModelBase
                 {
                     // Preparation runs off the UI thread. Progress returns to the UI context.
                     var progress = new Progress<string>(message => { if (preparing && !token.IsCancellationRequested) item.Status = message; });
-                    using var prepared = await Task.Run(() => _preparation.PrepareAsync(item.Path, progress, token), token);
+                    using var prepared = settings.UseLocalTranscription
+                        ? new PreparedAudio([item.Path], new FileInfo(item.Path).Length, new FileInfo(item.Path).Length, "Processed locally", null)
+                        : await Task.Run(() => _preparation.PrepareAsync(item.Path, progress, token), token);
                     preparing = false;
                     var saved = Math.Max(0, 100d * (1 - (double)prepared.UploadBytes / prepared.OriginalBytes));
-                    item.Details = $"{prepared.OriginalBytes / 1_000_000d:0.##} MB → {prepared.UploadBytes / 1_000_000d:0.##} MB upload ({saved:0}% smaller). {prepared.Description}";
+                    item.Details = settings.UseLocalTranscription ? "Processed on this computer · no upload" : $"{prepared.OriginalBytes / 1_000_000d:0.##} MB → {prepared.UploadBytes / 1_000_000d:0.##} MB upload ({saved:0}% smaller). {prepared.Description}";
                     var transcripts = new List<string>();
                     for (var part = 0; part < prepared.Paths.Count; part++)
                     {

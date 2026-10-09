@@ -28,6 +28,7 @@ public partial class MainWindow : Window
     private MainViewModel? _observedViewModel;
     private HotkeyRecordingTarget _recordingHotkeyTarget = HotkeyRecordingTarget.None;
     private ScratchpadWindow? _scratchpadWindow;
+    private WakeSetupWindow? _wakeSetupWindow;
     public bool IsDarkMode { get; set; }
 
     public MainWindow()
@@ -67,10 +68,24 @@ public partial class MainWindow : Window
         IsDarkMode = darkMode;
         NativeWindowStyler.Apply(this, darkMode);
         _scratchpadWindow?.ApplyTheme(darkMode);
+        _wakeSetupWindow?.ApplyTheme(darkMode);
     }
 
     private void OpenSettings_OnClick(object sender, RoutedEventArgs e) => SettingsTab.IsSelected = true;
+    private async void OpenWakeSetup_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel { WakeCalibration: { } model } || !model.CanEdit) return;
+        if (_wakeSetupWindow is not null) { _wakeSetupWindow.Activate(); return; }
+        try
+        {
+            _wakeSetupWindow = new WakeSetupWindow(model, IsDarkMode) { Owner = this };
+            if (!await model.BeginWizardAsync()) return;
+            _wakeSetupWindow.ShowDialog();
+        }
+        finally { await model.EndWizardAsync(); _wakeSetupWindow = null; }
+    }
 
+    private void OpenLocalSettings_OnExecuted(object sender, ExecutedRoutedEventArgs e) => OpenSettingsGroup(LocalSettingsGroup);
     private void OpenGroqSettings_OnExecuted(object sender, ExecutedRoutedEventArgs e) => OpenSettingsGroup(GroqSettingsGroup);
     private void OpenAudioSettings_OnExecuted(object sender, ExecutedRoutedEventArgs e) => OpenSettingsGroup(AudioSettingsGroup);
     private void OpenConversationSettings_OnExecuted(object sender, ExecutedRoutedEventArgs e) => OpenSettingsGroup(ConversationSettingsGroup);
@@ -257,16 +272,17 @@ public partial class MainWindow : Window
     private bool IsShowingSavedApiKeyPlaceholder() =>
         string.Equals(ApiKeyBox.Tag as string, SavedApiKeyPlaceholder, StringComparison.Ordinal);
 
-    private void HotkeyRecorderBox_OnGotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    private async void HotkeyRecorderBox_OnGotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
     {
         _recordingHotkeyTarget = HotkeyRecordingTarget.Dictation;
         HotkeyRecorderBox.Text = "Press shortcut...";
+        if (DataContext is MainViewModel vm) await vm.SuspendHotkeyEditingAsync();
     }
 
-    private void AutoCaptureHotkeyRecorderBox_OnGotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    private void HotkeyRecorderBox_OnLostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
     {
-        _recordingHotkeyTarget = HotkeyRecordingTarget.AutoCapture;
-        AutoCaptureHotkeyRecorderBox.Text = "Press shortcut...";
+        _recordingHotkeyTarget = HotkeyRecordingTarget.None;
+        if (DataContext is MainViewModel vm) vm.ResumeHotkeyEditing();
     }
 
     private async void SaveHotkeyButton_OnClick(object sender, RoutedEventArgs e)
@@ -275,15 +291,6 @@ public partial class MainWindow : Window
         if (DataContext is MainViewModel viewModel)
         {
             await viewModel.SaveHotkeyAsync();
-        }
-    }
-
-    private async void SaveAutoCaptureHotkeyButton_OnClick(object sender, RoutedEventArgs e)
-    {
-        _recordingHotkeyTarget = HotkeyRecordingTarget.None;
-        if (DataContext is MainViewModel viewModel)
-        {
-            await viewModel.SaveAutoCaptureHotkeyAsync();
         }
     }
 
@@ -310,26 +317,8 @@ public partial class MainWindow : Window
 
     private void SetRecordedHotkeyText(string shortcut)
     {
-        if (DataContext is MainViewModel viewModel)
-        {
-            if (_recordingHotkeyTarget is HotkeyRecordingTarget.AutoCapture)
-            {
-                viewModel.AutoCaptureHotkeyText = shortcut;
-            }
-            else
-            {
-                viewModel.HotkeyText = shortcut;
-            }
-        }
-
-        if (_recordingHotkeyTarget is HotkeyRecordingTarget.AutoCapture)
-        {
-            AutoCaptureHotkeyRecorderBox.Text = shortcut;
-        }
-        else
-        {
-            HotkeyRecorderBox.Text = shortcut;
-        }
+        if (DataContext is MainViewModel viewModel) viewModel.HotkeyText = shortcut;
+        HotkeyRecorderBox.Text = shortcut;
     }
 
     private static bool IsModifierKey(Key key)
@@ -396,7 +385,7 @@ public partial class MainWindow : Window
 
     private void AutoSaveSlider_OnValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        if (!IsSettingsChange(e)) return;
+        if (e.OriginalSource is not System.Windows.Controls.Slider || !IsSettingsChange(e)) return;
         QueueSettingsChange(saveImmediately: false);
     }
 
@@ -405,7 +394,6 @@ public partial class MainWindow : Window
         if (!IsSettingsChange(e)) return;
         if (e.OriginalSource is System.Windows.Controls.TextBox { IsReadOnly: true }) return;
         if (ReferenceEquals(e.OriginalSource, HotkeyRecorderBox) ||
-            ReferenceEquals(e.OriginalSource, AutoCaptureHotkeyRecorderBox) ||
             ReferenceEquals(e.OriginalSource, ApiKeyBox))
         {
             return;
@@ -460,10 +448,21 @@ public partial class MainWindow : Window
         }
     }
 
+    private void LocalTable_OnSelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (sender is System.Windows.Controls.DataGrid grid && grid.SelectedItems.Count > 0) grid.UnselectAll();
+    }
+
+    private void ModelInfo_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is System.Windows.Controls.Button { Tag: string url } &&
+            Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps)
+            Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true });
+    }
+
     private enum HotkeyRecordingTarget
     {
         None,
-        Dictation,
-        AutoCapture
+        Dictation
     }
 }

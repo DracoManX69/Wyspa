@@ -8,6 +8,48 @@ namespace Wyspa.Tests;
 
 public sealed class StreamingOrchestratorTests
 {
+    [Fact]
+    public async Task NonStreamingCaptureStoppedIsReportedBeforeTranscriptionCompletes()
+    {
+        var path = Path.GetTempFileName(); await File.WriteAllBytesAsync(path, new byte[32]);
+        try
+        {
+            var settings = new Settings { Value = new AppSettings { StreamModeEnabled = false } };
+            var capture = new Capture { RecordingPath = path }; var groq = new FakeGroq { ExpectedFormat = "text" };
+            var began = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var release = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+            groq.Handler = _ => { began.TrySetResult(); return release.Task; };
+            var orchestrator = new DictationOrchestrator(settings, new Secrets(), capture, groq, new(), new Insertion(), new Keys(), new());
+            var stopped = 0; orchestrator.CaptureStopped += (_, _) => { Assert.False(capture.IsRecording); stopped++; };
+            await orchestrator.StartListeningAsync(); var finish = orchestrator.StopListeningAndTranscribeAsync();
+            await began.Task.WaitAsync(TimeSpan.FromSeconds(5)); Assert.Equal(1, stopped); Assert.False(finish.IsCompleted);
+            release.SetResult("spoken words"); await finish; Assert.Equal(1, stopped);
+        }
+        finally { File.Delete(path); }
+    }
+    [Fact]
+    public async Task ReservedSetupRecording_CannotBeStoppedOrTranscribedByDictation()
+    {
+        var capture = new Capture();
+        var groq = new FakeGroq();
+        var orchestrator = new DictationOrchestrator(new Settings(), new Secrets(), capture,
+            groq, new(), new Insertion(), new Keys(), new());
+        await orchestrator.ReserveForNotesAsync(true);
+        await capture.StartRecordingAsync(null, CancellationToken.None);
+        await orchestrator.StopListeningAndTranscribeAsync();
+        await orchestrator.ToggleAsync();
+        await orchestrator.StopIfNeededAsync();
+        Assert.True(capture.IsRecording);
+        Assert.Equal(0, capture.Stops);
+        Assert.Empty(groq.Paths);
+        await capture.StopRecordingAsync(CancellationToken.None);
+        await orchestrator.ReserveForNotesAsync(false);
+        await orchestrator.StartListeningAsync();
+        Assert.True(capture.IsRecording);
+        Assert.Equal(DictationState.Listening, orchestrator.State);
+        await capture.StopRecordingAsync(CancellationToken.None);
+    }
+
     [Theory]
     [InlineData(ActivationMode.Toggle)]
     [InlineData(ActivationMode.HoldToTalk)]

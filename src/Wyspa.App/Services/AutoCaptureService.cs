@@ -2,12 +2,25 @@ using Wyspa.Core.Abstractions;
 using Wyspa.Core.Models;
 using Wyspa.Core.Services;
 using System.Windows.Threading;
+using System.Diagnostics;
 
 namespace Wyspa.App.Services;
 
 public sealed class AutoCaptureService : IDisposable
 {
-    public bool Suspended { get; set; }
+    private bool _suspended;
+    private CancellationTokenSource? _wakePreparation;
+    public bool Suspended
+    {
+        get => _suspended;
+        set
+        {
+            if (_suspended == value) return;
+            _suspended = value;
+            if (value) { _wakePreparation?.Cancel(); _monitor.Stop(); }
+            Interlocked.Increment(ref _wakeGeneration);
+        }
+    }
     public bool LevelPreviewEnabled { get; private set; }
     private readonly ISettingsService _settingsService;
     private readonly ISecretStore _secretStore;
@@ -16,21 +29,38 @@ public sealed class AutoCaptureService : IDisposable
     private readonly DictationOrchestrator _orchestrator;
     private readonly OverlayStatusService _overlay;
     private readonly WakeToneService _wakeTone;
-    private readonly WakeVoiceMatcher _wakeVoiceMatcher = new();
+    private readonly IWakePhraseDetector _wakeDetector;
+    private readonly bool _ownsWakeDetector;
+    private readonly CancellationTokenSource _wakeShutdown = new();
+    private readonly System.Threading.Channels.Channel<(float[] Samples, int Generation)> _wakeQueue = System.Threading.Channels.Channel.CreateBounded<(float[], int)>(new System.Threading.Channels.BoundedChannelOptions(8) { SingleReader = true, FullMode = System.Threading.Channels.BoundedChannelFullMode.Wait });
+    private readonly Task _wakeWorker;
+    private readonly ISpeechActivityDetector _speechDetector;
+    private readonly bool _ownsSpeechDetector;
+    private readonly IStreamingAudioCaptureService? _pcmSource;
+    private readonly SpeechEndpoint _endpoint = new();
+    private readonly Stopwatch _clock = Stopwatch.StartNew();
+    private readonly Task _speechWorker, _endpointWorker;
+    private readonly System.Threading.Channels.Channel<(float[] Samples, long Generation, TimeSpan At)> _speechQueue = System.Threading.Channels.Channel.CreateBounded<(float[], long, TimeSpan)>(32);
+    private volatile bool _speechReady, _automaticSession;
+    private long _sessionGeneration;
+    private int _wakeGeneration;
+    private bool _wakeReady;
+    private string? _appliedWakeConfiguration;
+    private string _wakeStatus = "Wake phrase detection is off.";
+    public string WakeStatus => _wakeStatus;
+    public event EventHandler<string>? WakeStatusChanged;
+    private void ReportWake(string message) { _wakeStatus = message; WakeStatusChanged?.Invoke(this, message); }
+
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly object _settingsLock = new();
-    private readonly List<float> _wakeVoiceBuffer = [];
     private readonly Queue<float> _preRoll = new();
     private readonly Dispatcher _dispatcher;
     private AppSettings _settings = new();
-    private DateTimeOffset _lastVoiceAt;
-    private DateTimeOffset _recordingStartedAt;
     private DateTimeOffset _cooldownUntil;
     private string? _monitorDeviceId;
     private bool _hasApiKey;
     private bool _isStarting;
     private bool _isStopping;
-    private DateTimeOffset _lastWakeVoiceCheckAt;
     private DateTimeOffset _wakeVoiceAcceptedUntil;
 
     public AutoCaptureService(
@@ -40,7 +70,7 @@ public sealed class AutoCaptureService : IDisposable
         IAudioCaptureService audioCapture,
         DictationOrchestrator orchestrator,
         OverlayStatusService overlay,
-        WakeToneService wakeTone)
+        WakeToneService wakeTone, IWakePhraseDetector? wakeDetector = null, ISpeechActivityDetector? speechDetector = null)
     {
         _settingsService = settingsService;
         _secretStore = secretStore;
@@ -49,6 +79,13 @@ public sealed class AutoCaptureService : IDisposable
         _orchestrator = orchestrator;
         _overlay = overlay;
         _wakeTone = wakeTone;
+        _wakeDetector = wakeDetector ?? new WakeKeywordEngine(); _ownsWakeDetector = wakeDetector is null;
+        _speechDetector = speechDetector ?? new LocalSpeechActivityDetector(); _ownsSpeechDetector = speechDetector is null;
+        _pcmSource = audioCapture as IStreamingAudioCaptureService;
+        if (_pcmSource is not null) _pcmSource.PcmAvailable += OnRecordingPcm;
+        _wakeWorker = Task.Run(RunWakeWorkerAsync);
+        _speechWorker = Task.Run(RunSpeechWorkerAsync);
+        _endpointWorker = Task.Run(RunEndpointWorkerAsync);
         _dispatcher = System.Windows.Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
         _monitor.LevelAvailable += OnMonitorLevel;
         _monitor.AudioAvailable += OnMonitorAudio;
@@ -62,7 +99,7 @@ public sealed class AutoCaptureService : IDisposable
     {
         var settings = await _settingsService.LoadAsync(cancellationToken);
         var hasApiKey = !string.IsNullOrWhiteSpace(await _secretStore.GetApiKeyAsync(cancellationToken));
-        await ApplySettingsAsync(settings, hasApiKey, cancellationToken);
+        await ApplySettingsAsync(settings, settings.UseLocalTranscription || hasApiKey, cancellationToken);
     }
 
     public async Task ApplySettingsAsync(AppSettings settings, bool hasApiKey, CancellationToken cancellationToken = default)
@@ -70,6 +107,9 @@ public sealed class AutoCaptureService : IDisposable
         await _gate.WaitAsync(cancellationToken);
         try
         {
+            var configuration = $"{settings.ActivationMode}|{settings.AutoCaptureListeningEnabled}|{settings.AutoCaptureWakeVoiceEnabled}|{settings.AutoCaptureWakePhrase}|{settings.AutoCaptureWakeVoiceSensitivity:R}|{settings.MicrophoneDeviceId}|{hasApiKey}";
+            if (configuration != _appliedWakeConfiguration) { _appliedWakeConfiguration = configuration; Interlocked.Increment(ref _wakeGeneration); }
+            if (_wakeDetector is IWakeEnrollmentDetector enrolled) enrolled.ConfigurePersonalization(settings.AutoCaptureWakeVoiceProfile, settings.MicrophoneDeviceId);
             SetSettings(settings, hasApiKey);
             _overlay.SetOpacity(settings.OverlayOpacity);
             await ApplyMonitorStateAsync(settings, hasApiKey, cancellationToken);
@@ -95,12 +135,39 @@ public sealed class AutoCaptureService : IDisposable
 
     private async Task ApplyMonitorStateAsync(AppSettings settings, bool hasApiKey, CancellationToken cancellationToken)
     {
+        // Preparation owns the shared level monitor until it releases its reservation.
+        if (Suspended) return;
+        if (settings.ActivationMode == ActivationMode.AutoCapture && settings.AutoCaptureListeningEnabled && hasApiKey && _pcmSource is not null && !_speechReady)
+        {
+            try { await _speechDetector.PrepareAsync(new Progress<string>(ReportWake), cancellationToken); _speechReady = true; }
+            catch (Exception ex) when (ex is not OperationCanceledException) { ReportWake("Speech detection unavailable; using the bounded level fallback. " + ex.Message); }
+        }
         if (_audioCapture.IsRecording || !ShouldMonitorRun(settings, hasApiKey))
         {
             _monitor.Stop();
             return;
         }
 
+        if (settings.AutoCaptureWakeVoiceEnabled && settings.ActivationMode == ActivationMode.AutoCapture && settings.AutoCaptureListeningEnabled && hasApiKey)
+        {
+            try
+            {
+                WakePhraseCalibration.Normalize(settings.AutoCaptureWakePhrase);
+                using var preparation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _wakeShutdown.Token);
+                _wakePreparation = preparation;
+                try { await _wakeDetector.PrepareAsync(new Progress<string>(ReportWake), preparation.Token); }
+                finally { _wakePreparation = null; }
+                if (Suspended || !ShouldMonitorRun(settings, hasApiKey)) { _monitor.Stop(); return; }
+                _wakeReady = true; ReportWake("Ready · waiting for “" + settings.AutoCaptureWakePhrase + "”. Wait for the tone before dictating.");
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            { _wakeReady = false; _monitor.Stop(); return; }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _wakeReady = false; _monitor.Stop(); ReportWake("Wake detector unavailable: " + ex.Message); return;
+            }
+        }
+        else if (!settings.AutoCaptureWakeVoiceEnabled || settings.ActivationMode != ActivationMode.AutoCapture || !settings.AutoCaptureListeningEnabled || !hasApiKey) { _wakeReady = false; ReportWake("Wake phrase detection is off."); }
         if (!_monitor.IsRunning || !string.Equals(_monitorDeviceId, settings.MicrophoneDeviceId, StringComparison.Ordinal))
         {
             _monitor.Stop();
@@ -108,6 +175,8 @@ public sealed class AutoCaptureService : IDisposable
             await _monitor.StartAsync(settings.MicrophoneDeviceId, cancellationToken);
         }
     }
+
+    public async Task StopWakeWorkerAsync() { _wakeShutdown.Cancel(); _wakeQueue.Writer.TryComplete(); _speechQueue.Writer.TryComplete(); await Task.WhenAll(_wakeWorker, _speechWorker, _endpointWorker); }
 
     public void Dispose()
     {
@@ -117,6 +186,10 @@ public sealed class AutoCaptureService : IDisposable
         _orchestrator.ListeningStarting -= OnListeningStarting;
         _orchestrator.CaptureStopped -= OnCaptureStopped;
         _orchestrator.StateChanged -= OnOrchestratorStateChanged;
+        if (_pcmSource is not null) _pcmSource.PcmAvailable -= OnRecordingPcm;
+        _endpoint.End(); _wakeShutdown.Cancel(); _wakeQueue.Writer.TryComplete(); _speechQueue.Writer.TryComplete();
+        if (_ownsSpeechDetector) _ = _speechWorker.ContinueWith(_ => _speechDetector.Dispose());
+        if (_ownsWakeDetector) _ = _wakeWorker.ContinueWith(_ => _wakeDetector.Dispose());
         _monitor.Dispose();
         _gate.Dispose();
     }
@@ -152,7 +225,7 @@ public sealed class AutoCaptureService : IDisposable
         lock (_preRoll)
         {
             if (!Suspended && _hasApiKey && settings.ActivationMode is ActivationMode.AutoCapture &&
-                settings.AutoCaptureListeningEnabled && !_audioCapture.IsRecording)
+                settings.AutoCaptureListeningEnabled && !_audioCapture.IsRecording && (!settings.AutoCaptureWakeVoiceEnabled || DateTimeOffset.UtcNow <= _wakeVoiceAcceptedUntil))
             {
                 foreach (var sample in samples) _preRoll.Enqueue(sample);
                 while (_preRoll.Count > 8000) _preRoll.Dequeue();
@@ -162,7 +235,7 @@ public sealed class AutoCaptureService : IDisposable
         if (Suspended || settings.ActivationMode is not ActivationMode.AutoCapture ||
             !settings.AutoCaptureListeningEnabled ||
             !settings.AutoCaptureWakeVoiceEnabled ||
-            settings.AutoCaptureWakeVoiceProfile is null ||
+            !_wakeReady ||
             !_hasApiKey ||
             _audioCapture.IsRecording ||
             _isStarting ||
@@ -173,50 +246,95 @@ public sealed class AutoCaptureService : IDisposable
             return;
         }
 
-        AppendWakeVoiceSamples(samples);
-        var now = DateTimeOffset.UtcNow;
-        if (now - _lastWakeVoiceCheckAt < TimeSpan.FromMilliseconds(180))
-        {
-            return;
-        }
+        if (!_wakeQueue.Writer.TryWrite((samples.ToArray(), Volatile.Read(ref _wakeGeneration))))
+            Interlocked.Increment(ref _wakeGeneration); // discontinuity: stale partial phrases cannot trigger
+    }
 
-        _lastWakeVoiceCheckAt = now;
-        if (Peak(samples) < Math.Max(0.015f, settings.AutoCaptureThreshold * 0.45f))
+    private async Task RunWakeWorkerAsync()
+    {
+        var generation = -1; long samplesSinceReset = 0; long silent = 0;
+        try
         {
-            return;
+            await foreach (var entry in _wakeQueue.Reader.ReadAllAsync(_wakeShutdown.Token))
+            {
+                var settings = GetSettingsSnapshot();
+                if (entry.Generation != Volatile.Read(ref _wakeGeneration) || Suspended || !_wakeReady || !settings.AutoCaptureWakeVoiceEnabled ||
+                    settings.ActivationMode != ActivationMode.AutoCapture || !settings.AutoCaptureListeningEnabled || _audioCapture.IsRecording || _isStarting || _isStopping)
+                    continue;
+                if (generation != entry.Generation) { _wakeDetector.Reset(); generation = entry.Generation; samplesSinceReset = 0; silent = 0; }
+                try
+                {
+                    var found = await _wakeDetector.ProcessAsync(entry.Samples, settings.AutoCaptureWakePhrase, settings.AutoCaptureWakeVoiceSensitivity, _wakeShutdown.Token);
+                    samplesSinceReset += entry.Samples.Length;
+                    silent = Peak(entry.Samples) < .008f ? silent + entry.Samples.Length : 0;
+                    if (samplesSinceReset > 16000 * 20 && silent > 16000) { _wakeDetector.Reset(); samplesSinceReset = 0; }
+                    else if (samplesSinceReset > 16000 * 120) { _wakeDetector.Reset(); samplesSinceReset = 0; }
+                    if (found && generation == Volatile.Read(ref _wakeGeneration) && !Suspended && !_audioCapture.IsRecording)
+                    {
+                        Interlocked.Increment(ref _wakeGeneration);
+                        lock (_preRoll) _preRoll.Clear();
+                        _wakeVoiceAcceptedUntil = DateTimeOffset.UtcNow.AddMilliseconds(900);
+                        ReportWake("Wake phrase accepted. Dictation starts after the tone.");
+                        RunOnAppDispatcher(StartCaptureAsync);
+                    }
+                }
+                catch (OperationCanceledException) when (_wakeShutdown.IsCancellationRequested) { break; }
+                catch (Exception ex) { _wakeReady = false; ReportWake("Wake detection paused: " + ex.Message); }
+            }
         }
-
-        var score = ScoreWakeVoice(settings.AutoCaptureWakeVoiceProfile);
-        if (score >= settings.AutoCaptureWakeVoiceSensitivity)
-        {
-            _wakeVoiceAcceptedUntil = DateTimeOffset.UtcNow.AddMilliseconds(900);
-            ClearWakeVoiceBuffer();
-            RunOnAppDispatcher(StartCaptureAsync);
-        }
+        catch (OperationCanceledException) when (_wakeShutdown.IsCancellationRequested) { }
     }
 
     private void OnRecordingLevel(object? sender, float level)
     {
-        var settings = GetSettingsSnapshot();
-        if (settings.ActivationMode is not ActivationMode.AutoCapture || !_audioCapture.IsRecording)
+        if (Suspended || !_automaticSession || !_audioCapture.IsRecording) return;
+        // A peak is not speech: PCM-capable capture uses the neural detector instead.
+        if ((!_speechReady || _pcmSource is null) && SpeechEndpoint.FallbackSpeech(level, GetSettingsSnapshot().AutoCaptureThreshold))
+            _endpoint.Speech(Volatile.Read(ref _sessionGeneration), _clock.Elapsed);
+    }
+    private void OnRecordingPcm(object? sender, ReadOnlyMemory<byte> pcm)
+    {
+        if (Suspended || !_automaticSession || !_speechReady || !_audioCapture.IsRecording || pcm.Length < 2) return;
+        var samples = new float[pcm.Length / 2];
+        for (var i = 0; i < samples.Length; i++) samples[i] = System.Buffers.Binary.BinaryPrimitives.ReadInt16LittleEndian(pcm.Span.Slice(i * 2, 2)) / 32768f;
+        _speechQueue.Writer.TryWrite((samples, Volatile.Read(ref _sessionGeneration), _clock.Elapsed));
+    }
+    private async Task RunSpeechWorkerAsync()
+    {
+        long generation = -1;
+        try
         {
-            return;
+            await foreach (var entry in _speechQueue.Reader.ReadAllAsync(_wakeShutdown.Token))
+            {
+                if (entry.Generation != Volatile.Read(ref _sessionGeneration) || !_automaticSession || Suspended) continue;
+                if (generation != entry.Generation) { _speechDetector.Reset(); generation = entry.Generation; }
+                try
+                {
+                    if (await _speechDetector.ProcessAsync(entry.Samples, _wakeShutdown.Token)) _endpoint.Speech(entry.Generation, entry.At);
+                }
+                catch (OperationCanceledException) when (_wakeShutdown.IsCancellationRequested) { break; }
+                catch (Exception ex) { _speechReady = false; ReportWake("Speech detection fell back to audio levels: " + ex.Message); }
+            }
         }
-
-        if (level >= settings.AutoCaptureThreshold * 0.65f)
+        catch (OperationCanceledException) when (_wakeShutdown.IsCancellationRequested) { }
+    }
+    private async Task RunEndpointWorkerAsync()
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(100));
+        try
         {
-            _lastVoiceAt = DateTimeOffset.UtcNow;
-            return;
+            while (await timer.WaitForNextTickAsync(_wakeShutdown.Token))
+            {
+                var settings = GetSettingsSnapshot();
+                if (!Suspended && _automaticSession && _audioCapture.IsRecording && !_isStarting && !_isStopping &&
+                    _endpoint.ShouldStop(_clock.Elapsed, settings.AutoCaptureSilenceMs, settings.AutoCaptureMinSpeechMs))
+                {
+                    var generation = Volatile.Read(ref _sessionGeneration);
+                    RunOnAppDispatcher(() => StopCaptureAsync(generation));
+                }
+            }
         }
-
-        var now = DateTimeOffset.UtcNow;
-        if (!_isStopping &&
-            now - _lastVoiceAt >= TimeSpan.FromMilliseconds(settings.AutoCaptureSilenceMs) &&
-            now - _recordingStartedAt >= TimeSpan.FromMilliseconds(settings.AutoCaptureMinSpeechMs))
-        {
-            var startedAt = _recordingStartedAt;
-            RunOnAppDispatcher(() => StopCaptureAsync(startedAt));
-        }
+        catch (OperationCanceledException) when (_wakeShutdown.IsCancellationRequested) { }
     }
 
     private async Task StartCaptureAsync()
@@ -238,7 +356,7 @@ public sealed class AutoCaptureService : IDisposable
             }
 
             var apiKey = await _secretStore.GetApiKeyAsync(CancellationToken.None);
-            if (string.IsNullOrWhiteSpace(apiKey))
+            if (!settings.UseLocalTranscription && string.IsNullOrWhiteSpace(apiKey))
             {
                 _cooldownUntil = DateTimeOffset.UtcNow.AddMilliseconds(1200);
                 return;
@@ -260,14 +378,8 @@ public sealed class AutoCaptureService : IDisposable
                 }
                 _preRoll.Clear();
             }
-            if (settings.AutoCaptureWakeVoiceEnabled)
-            {
-                _wakeTone.Play(settings);
-            }
-
-            _recordingStartedAt = DateTimeOffset.UtcNow;
-            _lastVoiceAt = _recordingStartedAt;
             await _orchestrator.StartListeningAsync(preRoll: preRoll);
+            if (settings.AutoCaptureWakeVoiceEnabled && _audioCapture.IsRecording) _wakeTone.Play(settings);
         }
         finally
         {
@@ -276,13 +388,13 @@ public sealed class AutoCaptureService : IDisposable
         }
     }
 
-    private async Task StopCaptureAsync(DateTimeOffset startedAt)
+    private async Task StopCaptureAsync(long generation)
     {
         bool streaming;
         await _gate.WaitAsync();
         try
         {
-            if (!_audioCapture.IsRecording || _isStopping || _recordingStartedAt != startedAt)
+            if (Suspended || !_audioCapture.IsRecording || _isStopping || Volatile.Read(ref _sessionGeneration) != generation)
             {
                 return;
             }
@@ -308,6 +420,7 @@ public sealed class AutoCaptureService : IDisposable
 
     private async Task RestartMonitorIfNeededAsync()
     {
+        if (Suspended) return;
         var settings = GetSettingsSnapshot();
         if (_audioCapture.IsRecording)
         {
@@ -332,13 +445,20 @@ public sealed class AutoCaptureService : IDisposable
 
     private void OnListeningStarting(object? sender, EventArgs e)
     {
+        Interlocked.Increment(ref _wakeGeneration);
         _monitor.Stop();
+        _automaticSession = GetSettingsSnapshot().ActivationMode == ActivationMode.AutoCapture;
+        Volatile.Write(ref _sessionGeneration, _endpoint.Begin(_clock.Elapsed));
         lock (_preRoll) _preRoll.Clear();
     }
 
     private void OnCaptureStopped(object? sender, EventArgs e)
     {
-        _isStopping = false;
+        _isStopping = false; _automaticSession = false; _endpoint.End();
+        Interlocked.Increment(ref _wakeGeneration);
+        _wakeVoiceAcceptedUntil = DateTimeOffset.MinValue;
+        var settings = GetSettingsSnapshot();
+        if (settings.AutoCaptureWakeVoiceEnabled && ShouldMonitorRun(settings)) ReportWake("Ready · waiting for “" + settings.AutoCaptureWakePhrase + "”.");
         // Network processing continues independently; resume the local monitor
         // now, without a network-length gap or a post-processing cooldown.
         RunOnAppDispatcher(RestartMonitorIfNeededAsync);
@@ -403,41 +523,14 @@ public sealed class AutoCaptureService : IDisposable
             _hasApiKey = hasApiKey;
         }
 
-        if (!settings.AutoCaptureWakeVoiceEnabled || settings.AutoCaptureWakeVoiceProfile is null)
+        if (!settings.AutoCaptureWakeVoiceEnabled)
         {
             ClearWakeVoiceBuffer();
             _wakeVoiceAcceptedUntil = DateTimeOffset.MinValue;
         }
     }
 
-    private void AppendWakeVoiceSamples(IReadOnlyList<float> samples)
-    {
-        lock (_wakeVoiceBuffer)
-        {
-            _wakeVoiceBuffer.AddRange(samples);
-            var maxSampleCount = WakeVoiceMatcher.SampleRate * 4;
-            if (_wakeVoiceBuffer.Count > maxSampleCount)
-            {
-                _wakeVoiceBuffer.RemoveRange(0, _wakeVoiceBuffer.Count - maxSampleCount);
-            }
-        }
-    }
-
-    private double ScoreWakeVoice(WakeVoiceProfile profile)
-    {
-        lock (_wakeVoiceBuffer)
-        {
-            return _wakeVoiceMatcher.Score(_wakeVoiceBuffer, profile);
-        }
-    }
-
-    private void ClearWakeVoiceBuffer()
-    {
-        lock (_wakeVoiceBuffer)
-        {
-            _wakeVoiceBuffer.Clear();
-        }
-    }
+    private void ClearWakeVoiceBuffer() { Interlocked.Increment(ref _wakeGeneration); }
 
     private static float Peak(IReadOnlyList<float> samples)
     {
@@ -452,6 +545,8 @@ public sealed class AutoCaptureService : IDisposable
 
     private static AppSettings CopySettings(AppSettings settings) => new()
     {
+        UseLocalTranscription = settings.UseLocalTranscription,
+        LocalModelId = settings.LocalModelId,
         FirstRunComplete = settings.FirstRunComplete,
         MicrophoneDeviceId = settings.MicrophoneDeviceId,
         Hotkey = settings.Hotkey,
@@ -479,6 +574,7 @@ public sealed class AutoCaptureService : IDisposable
         AutoCaptureMinSpeechMs = settings.AutoCaptureMinSpeechMs,
         AutoCaptureListeningEnabled = settings.AutoCaptureListeningEnabled,
         AutoCaptureMediaBehavior = settings.AutoCaptureMediaBehavior,
+        AutoCaptureWakePhrase = settings.AutoCaptureWakePhrase,
         AutoCaptureWakeVoiceEnabled = settings.AutoCaptureWakeVoiceEnabled,
         AutoCaptureWakeVoiceSensitivity = settings.AutoCaptureWakeVoiceSensitivity,
         AutoCaptureWakeVoiceProfile = settings.AutoCaptureWakeVoiceProfile,

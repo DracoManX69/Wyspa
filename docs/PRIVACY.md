@@ -54,7 +54,7 @@ Wyspa does not intentionally send:
 
 The transcript is placed on the local clipboard when paste insertion is used. This happens locally so Wyspa can paste into the active app.
 
-If AutoCapture media handling is enabled, Wyspa may locally mute the default Windows output device or send the standard Windows play/pause media key while AutoCapture listening is on. Wyspa does not inspect track names, app media libraries, or what audio is playing.
+If Media Handling is enabled, only a hotkey-owned session may mute the default Windows output device or pause supported playing media sessions. Wyspa reads playback status so it can resume only sessions it paused; it does not retrieve track names, album art, app media libraries or media content. Settings saves, model comparisons and practice recordings do not issue media commands.
 
 ## Data Stored Locally
 
@@ -147,7 +147,7 @@ File transcripts are held in memory until cleared or the app exits. Copy and Sav
 
 ## Conversation notes and YouTube (0.7.0)
 
-Conversation capture starts only when you select Start. Computer-call mode sends microphone and selected output audio to Groq in separate short requests. Output-device capture includes all sound on that device. App capture includes the selected process and its child processes, not a single browser tab. In-person mode sends the microphone audio to Groq; speaker segmentation and matching run locally using bundled models. A short rolling audio context and speaker embeddings exist only in memory for that session and are cleared when it finishes; they are not saved or uploaded as speaker profiles.
+Conversation capture starts only when you select Start. Computer-call mode sends microphone and selected output audio to Groq in separate short requests. Output-device capture includes all sound on that device. App capture includes the selected process and its child processes, not a single browser tab. In-person mode sends the microphone audio to Groq; speaker segmentation and matching run locally using models downloaded automatically before first use. A short rolling audio context and speaker embeddings exist only in memory for that session and are cleared when it finishes; they are not saved or uploaded as speaker profiles.
 
 Summarise sends the selected transcript, speaker labels and timestamps to Groq using the existing protected API key and the chosen chat model. Long notes may require several summarisation requests. No automatic summary is requested.
 
@@ -161,8 +161,34 @@ The overlay indicates capture state; closing it does not stop the session. Pause
 
 ## Stream Mode and Stream Fix
 
-Activated Stream Mode sends overlapping microphone snapshots while recording and a complete final audio pass after recording stops. This repeats some audio and increases requests compared with ordinary dictation. Its temporary PCM spool is deleted after the session; the original recording follows the existing debug-retention preference.
+In Groq mode, activated Stream Mode sends overlapping microphone snapshots while recording and a complete final audio pass after recording stops. This repeats some audio and increases requests compared with ordinary dictation. Its temporary PCM spool is deleted after the session; the original recording follows the existing debug-retention preference.
 
 When experimental Stream Fix is enabled, Wyspa also sends only the current dictation transcript to the selected text cleanup model with a fixed proofreading instruction. Existing field text and previous clipboard contents are excluded from proofreading; only Wyspa's transcript for this session is cleaned. Text outside the dictated range stays local. Wyspa reads the focused field's text, caret and document identity locally to verify safe insertion/correction, and observes input/focus changes while it owns that insertion point. It does not retain a keystroke log or send surrounding document text to Groq.
 
 Stream Mode continually replaces the clipboard with the current dictation, then with the final transcript. It intentionally does not restore the previous clipboard. Unsupported or edited fields retain their live text and use the final clipboard for manual recovery.
+
+## Local transcription (0.9.5)
+
+When Use local transcription is enabled, speech recognition runs on this computer. Audio and transcript text are not sent to Groq by local transcription, rewrite, AI action, Stream Fix or summary paths. Downloading a model contacts Hugging Face; YouTube import contacts external video services, and existing update checks remain separate. Models are saved in `%LocalAppData%\Wyspa\Models` and can be removed in Settings → Local models. Local mode does not generate AI summaries or rewrites.
+
+Voice setup records only after an explicit Record action, processes both baseline and personalised tests locally, and deletes each temporary recording after testing/cancellation. Profiles store language, vocabulary, model IDs and error/timing scores in settings; they do not retain setup audio or transcript text. Delete profile removes those profile fields.
+
+Fresh installs default to local processing with the included Zipformer English model; preparing it copies and verifies bundled files locally without contacting a model host. Existing provider preferences are preserved. Zipformer Stream Mode feeds chunks to a stateful recognizer locally and flushes the tail at stop, with no audio upload. Whisper local streaming uses bounded local windows. GPU detection queries local hardware; it does not send a hardware inventory. Voice setup is optional; vocabulary hints apply to Whisper and pace calibration affects SmartListen.
+
+First-use optional dependency setup contacts GitHub for Deno and the speaker embedding model, and Hugging Face for the speaker segmentation model. Downloads contain executable/model files only; no recordings, embeddings or transcript text are sent to those hosts. Downloads are pinned by size and SHA-256 and cached under `%LocalAppData%\Wyspa\Dependencies`. In-person recording begins only after preparation succeeds; cancellation stops preparation before capture. Runtime prerequisites are downloaded from Microsoft inside Setup when required.
+
+Hardware advice reads CPU/RAM/GPU information locally. Optional speed tests use the bundled public English speech clip; local testing has no upload. Compare with Groq explicitly sends that sample using the saved key and selected transcription model, and may use API quota. User microphone audio, hardware inventory, surrounding document text and personal vocabulary are excluded from the comparison. Saved reports contain hardware-model/driver fingerprints, timings and error counts, without credentials or recognized transcript text. The test does not automatically change provider/model.
+
+Opt-in wake phrase monitoring runs locally and does not send ambient audio to Groq. Once a phrase is accepted, ordinary dictation uses the selected provider; cloud mode sends that dictation recording to Groq. The personal wake popup reserves ordinary listening for its whole session and records samples only after an explicit button action, for up to five seconds for a phrase or eight seconds for a sentence; room sound lasts three seconds. Speech samples can stop earlier after a pause. Raw audio stays in a bounded in-memory buffer and is discarded after evaluation or cancellation. The local settings file saves compact pronunciation feature trajectories, background level, detected text, sample labels and threshold/check results. These derived voice features are personal data, even though raw recordings are not stored. Pending setup keeps derived features so completed steps can resume; completed setup retains only the phrase templates, variants and sample results needed for the profile. Failed checks can be retained as labelled teaching examples to adjust matching; the replacement checks use new recordings. Closing discards the current recording and keeps completed examples. Learning a fresh profile deletes the stored enrollment examples. This is not biometric authentication. Enable wake phrases starts SmartListen monitoring; turning it off stops wake gating. Wake/model downloads contact the linked hosts and verify pinned hashes; microphone audio is excluded from downloads.
+
+
+Managed Redux/Faster-Whisper inference uses an isolated background process with an app-managed, hash-pinned embeddable Python runtime. No system Python installation, pip, shell or global PATH change is performed. Runtime/model downloads fetch public binaries/weights once; the worker sets Hugging Face offline/telemetry-disabled mode and reads verified local model paths. Raw temporary PCM is discarded after success, error, cancellation or worker shutdown. Prompts/transcripts are not written to worker logs. Faster-Whisper CUDA libraries are optional, cached outside Setup, and configured only in the child process. CPU/GPU tests use the included public sample and save timing/device/error metrics; Groq receives that sample only when Compare with Groq is explicitly selected.
+
+
+Media handling is owned only by sessions initiated with the listening hotkey. Settings saves, comparison/calibration reservations and manual test recordings do not issue media commands. Pause Media reads only playback status through Windows media sessions, pauses sessions already playing, and resumes only those Wyspa successfully paused and that are still paused. It does not retrieve track titles, album art or media content; no blind play/pause key is sent. The second shortcut setting remains serialized for compatibility but is no longer registered.
+
+
+Wake candidates are verified locally with a small English Whisper model. A bounded recent-audio buffer is kept only in memory, verification has no personal/transcript prompt, and no wake audio is uploaded or saved. Local Silero VAD detects speech for endpointing; its model and optional verification weights are hash-pinned and downloaded on demand. Neither these classifiers nor their temporary buffers change the selected transcription provider/model.
+
+
+Keyword token timestamps can crop the in-memory verification window. A failed short word check retains the original full-window check and a bounded additional-audio retry; neither sends audio to a server or forces a target transcript. Token metadata uses the pinned local sherpa C API. Sentence-family seeds and the enrollment suite version are saved with the derived profile so pending setup can resume consistently. Incompatible older pending suites restart; validated profiles are preserved.

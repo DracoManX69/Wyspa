@@ -1,0 +1,91 @@
+<Window x:Class="Wyspa.App.WakeSetupWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Name="Wizard" Title="Wyspa · Personal wake setup" Icon="Assets/AppIcon.ico" Style="{StaticResource {x:Type Window}}"
+        Width="620" Height="650" MinWidth="420" MinHeight="420"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{DynamicResource AppBackgroundBrush}" Closing="Window_OnClosing">
+    <Grid Background="{DynamicResource AppBackgroundBrush}">
+    <Grid Margin="24,20,24,24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <StackPanel Margin="0,0,0,20">
+            <TextBlock Text="Make Wyspa recognize you" Style="{StaticResource PageTitle}" TextWrapping="Wrap" />
+            <TextBlock Text="Speak in your own voice. Wyspa adapts its matching to you." Style="{StaticResource BodyText}" Margin="0,8,0,0" />
+        </StackPanel>
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,12,0">
+            <StackPanel>
+                <StackPanel x:Name="Introduction">
+                    <StackPanel.Style><Style TargetType="StackPanel"><Setter Property="Visibility" Value="Visible" /><Style.Triggers>
+                        <DataTrigger Binding="{Binding IsStarted, ElementName=Wizard}" Value="True"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger>
+                        <DataTrigger Binding="{Binding SetupComplete}" Value="True"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger>
+                    </Style.Triggers></Style></StackPanel.Style>
+                    <TextBlock Text="Your wake phrase" Style="{StaticResource FieldLabel}" />
+                    <TextBox Text="{Binding Phrase, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanEdit}" MaxLength="60" AutomationProperties.Name="Wizard wake phrase" ToolTip="Choose two to five English words. You can say them with your natural pronunciation." />
+                    <TextBlock Text="{Binding PhraseProblem}" Style="{StaticResource BodyText}" Margin="0,8,0,0" AutomationProperties.LiveSetting="Polite" />
+                    <TextBlock Text="About two minutes" Style="{StaticResource SectionTitle}" Margin="0,24,0,8" />
+                    <TextBlock Text="Use your usual microphone and working position. Wake readings alternate with everyday sentences and similar words. Only three samples ask for the phrase on its own." Style="{StaticResource BodyText}" />
+                    <TextBlock Text="There is no preferred accent or voice to imitate. Keep your normal pronunciation, rhythm and volume. Consistent differences such as ‘whisba’ can become part of your personal profile." Style="{StaticResource BodyText}" Margin="0,12,0,0" />
+                    <TextBlock Text="Wyspa adjusts strictness in the background and checks new examples before applying it. If a check is missed, it learns from that recording and checks the adjusted profile again." Style="{StaticResource BodyText}" Margin="0,12,0,0" />
+                    <TextBlock Text="Press Record sample, read naturally, then pause. The sample finishes automatically after speech; Finish recording is available if background sound keeps it open. You can pause at any time." Style="{StaticResource BodyText}" Margin="0,12,0,0" />
+                </StackPanel>
+                <StackPanel x:Name="Readings">
+                    <StackPanel.Style><Style TargetType="StackPanel"><Setter Property="Visibility" Value="Visible" /><Style.Triggers>
+                        <DataTrigger Binding="{Binding IsStarted, ElementName=Wizard}" Value="False"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger>
+                        <DataTrigger Binding="{Binding SetupComplete}" Value="True"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger>
+                    </Style.Triggers></Style></StackPanel.Style>
+                    <TextBlock Text="{Binding PracticeProgress}" Style="{StaticResource BodyText}" />
+                    <ProgressBar Value="{Binding SetupProgress, Mode=OneWay}" Maximum="100" Height="4" Margin="0,8,0,20" AutomationProperties.Name="Wake setup progress" />
+                    <TextBlock Text="{Binding SetupTitle}" Style="{StaticResource SectionTitle}" />
+                    <TextBlock Text="{Binding PracticePrompt}" FontSize="24" TextWrapping="Wrap" Foreground="{DynamicResource InkBrush}" Margin="0,12,0,12" AutomationProperties.Name="Wake setup reading" />
+                    <TextBlock Text="{Binding SetupHint}" Style="{StaticResource BodyText}" />
+                    <ProgressBar Value="{Binding Level, Mode=OneWay}" Maximum="1" Height="6" Margin="0,24,0,8" AutomationProperties.Name="Wake setup microphone level" />
+                    <TextBlock Text="{Binding Status}" Style="{StaticResource BodyText}" AutomationProperties.LiveSetting="Polite" />
+                    <TextBlock Text="{Binding SampleFeedback}" Style="{StaticResource BodyText}" Margin="0,12,0,0" AutomationProperties.LiveSetting="Polite" />
+                    <WrapPanel Margin="0,12,0,0">
+                        <Button Content="Finish recording" Command="{Binding FinishCommand}" ToolTip="Stop this sample early when you have finished speaking." />
+                        <Button Content="Discard recording" Command="{Binding CancelCommand}" ToolTip="Discard only the current sample and keep completed examples." />
+                    </WrapPanel>
+                </StackPanel>
+                <StackPanel x:Name="Completion">
+                    <StackPanel.Style><Style TargetType="StackPanel"><Setter Property="Visibility" Value="Collapsed" /><Style.Triggers>
+                        <DataTrigger Binding="{Binding SetupComplete}" Value="True"><Setter Property="Visibility" Value="Visible" /></DataTrigger>
+                    </Style.Triggers></Style></StackPanel.Style>
+                    <TextBlock Text="Your wake profile is ready" Style="{StaticResource SectionTitle}" />
+                    <TextBlock Text="{Binding TuningSummary}" Style="{StaticResource BodyText}" Margin="0,12,0,0" />
+                    <TextBlock Text="Recognized pronunciations" Style="{StaticResource FieldLabel}" Margin="0,24,0,8" />
+                    <TextBlock Text="{Binding LearnedPronunciations}" FontSize="20" TextWrapping="Wrap" Foreground="{DynamicResource InkBrush}" AutomationProperties.Name="Learned wake pronunciations" />
+                    <TextBlock Text="{Binding UseInstructions}" Style="{StaticResource BodyText}" Margin="0,24,0,0" />
+                    <TextBlock Text="If you change your microphone or room, run setup again so Wyspa can adapt to the new conditions." Style="{StaticResource BodyText}" Margin="0,12,0,0" />
+                    <Button Content="Learn a fresh profile" Click="Restart_OnClick" IsEnabled="{Binding CanEdit}" HorizontalAlignment="Left" Margin="0,16,0,0" ToolTip="Replace these examples with a new setup while keeping your phrase." />
+                </StackPanel>
+                <TextBlock Text="Raw recordings are discarded. Pronunciation features and setup results remain on this PC." Style="{StaticResource BodyText}" Margin="0,24,0,12" />
+            </StackPanel>
+        </ScrollViewer>
+        <Border Grid.Row="2" BorderBrush="{DynamicResource LineBrush}" BorderThickness="0,1,0,0" Padding="0,16,0,0" Margin="0,12,0,0">
+            <WrapPanel HorizontalAlignment="Right">
+                <Button Content="Start setup" Click="Start_OnClick" IsEnabled="{Binding CanStartWizard}" IsDefault="True" AutomationProperties.Name="Start wake wizard" ToolTip="Start the guided setup with your chosen English phrase. No audio is recorded yet.">
+                    <Button.Style><Style TargetType="Button" BasedOn="{StaticResource PrimaryButton}"><Style.Triggers>
+                        <DataTrigger Binding="{Binding IsStarted, ElementName=Wizard}" Value="True"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger>
+                        <DataTrigger Binding="{Binding SetupComplete}" Value="True"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger>
+                    </Style.Triggers></Style></Button.Style>
+                </Button>
+                <Button Content="{Binding PracticeLabel}" Command="{Binding PracticeCommand}" IsDefault="True" AutomationProperties.Name="Record wake sample">
+                    <Button.Style><Style TargetType="Button" BasedOn="{StaticResource PrimaryButton}"><Style.Triggers>
+                        <DataTrigger Binding="{Binding IsStarted, ElementName=Wizard}" Value="False"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger>
+                        <DataTrigger Binding="{Binding SetupComplete}" Value="True"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger>
+                    </Style.Triggers></Style></Button.Style>
+                </Button>
+                <Button Click="Close_OnClick" AutomationProperties.Name="Close wake wizard">
+                    <Button.Style><Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Setter Property="Content" Value="Pause and close" /><Style.Triggers>
+                        <DataTrigger Binding="{Binding SetupComplete}" Value="True"><Setter Property="Content" Value="Done" /></DataTrigger>
+                    </Style.Triggers></Style></Button.Style>
+                </Button>
+            </WrapPanel>
+        </Border>
+    </Grid>
+    </Grid>
+</Window>

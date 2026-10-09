@@ -14,7 +14,7 @@
                         <Button Content="Start" Style="{StaticResource PrimaryButton}" Command="{Binding StartCommand}" ToolTip="Start recording a conversation using the configured microphone and capture sources." />
                         <Button Content="{Binding PauseText}" Command="{Binding PauseCommand}" ToolTip="Pause or resume conversation recording without ending the session." />
                         <Button Content="Stop" Command="{Binding StopCommand}" ToolTip="Finish recording. Pending transcription continues until captured audio has been processed." />
-                        <Button Content="Cancel pending" Command="{Binding CancelPendingCommand}" ToolTip="Cancel outstanding conversation transcription requests. Already received text remains available." />
+                        <Button Content="Cancel pending" Command="{Binding CancelPendingCommand}" ToolTip="Cancel first-use speaker downloads or outstanding conversation transcription requests. Already received text remains available." />
                         <Button Content="Floating overlay" Click="OpenOverlay_OnClick" ToolTip="Open the compact conversation window. Closing it does not stop recording." />
                     </WrapPanel>
                 </StackPanel>

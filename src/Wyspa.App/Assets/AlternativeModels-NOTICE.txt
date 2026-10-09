@@ -1,0 +1,43 @@
+Optional alternative speech models (downloaded only on user request)
+
+NVIDIA Parakeet TDT 0.6B v2 and v3: NVIDIA, CC BY 4.0.
+Originals: https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2 and https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3
+License: https://creativecommons.org/licenses/by/4.0/
+INT8 ONNX conversions by the sherpa-onnx maintainers, linked to pinned revisions in AlternativeSpeechModels.cs. Quantization/export changes the original format and precision.
+
+Moonshine Tiny/Base: Useful Sensors, MIT.
+Originals: https://huggingface.co/UsefulSensors/moonshine-tiny and https://huggingface.co/UsefulSensors/moonshine-base
+Project/license: https://github.com/moonshine-ai/moonshine
+INT8 ONNX conversions by the sherpa-onnx maintainers; pinned manifests in AlternativeSpeechModels.cs.
+
+Zipformer English streaming: Next-gen Kaldi / icefall contributors, Apache 2.0.
+https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-en-2023-06-26
+
+Wake keyword spotter: sherpa-onnx GigaSpeech Zipformer 3.3M (English), Apache 2.0.
+Official archive: https://github.com/k2-fsa/sherpa-onnx/releases/download/kws-models/sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01.tar.bz2
+Archive SHA256: f170013b4716e41b62b9bfd809687c207cef798ef9bc6534d524e17af9b6561a
+Direct-file mirror: https://huggingface.co/mobilebytesensei/sherpa-onnx-kws-zipformer-gigaspeech-3.3M/tree/e8ca74a794ce66e38a100e7c60c0214189ff4100
+Every used mirror file was hash-compared with the official archive. Weights/tokenizer files are unmodified on disk; a tokenizer-reader compatibility adjustment maps disabled BOS/EOS metadata in memory without changing pieces or scores.
+
+Microsoft.ML.Tokenizers 2.0.0: Microsoft, MIT. https://github.com/dotnet/machinelearning
+Google.Protobuf dependency: Google, BSD-3-Clause. https://github.com/protocolbuffers/protobuf
+All neural inference is local. Hardware/API speed tests do not imply universal accuracy, speaker identity or wake false-positive guarantees.
+
+Moondream Parakeet Redux: Moondream and NVIDIA (Parakeet TDT 0.6B v3), CC BY 4.0.
+Original: https://huggingface.co/moondream/parakeet-redux
+ONNX conversion: https://huggingface.co/eschmidbauer/parakeet-redux-onnx
+Weights converted/repacked by the exporter as 4-bit MatMulNBits blocks with ternary values; Wyspa does not retrain them. Wyspa's decoder follows the documented NeMo tensor/token-duration conventions. Source Photon benchmark speeds are not claims about this ONNX export. CC BY 4.0: https://creativecommons.org/licenses/by/4.0/
+
+SenseVoice Small: FunAudioLLM / Alibaba, Apache 2.0.
+Original: https://huggingface.co/FunAudioLLM/SenseVoiceSmall
+Project: https://github.com/FunAudioLLM/SenseVoice
+INT8 ONNX export by the sherpa-onnx maintainers; pinned manifest in ExtraSpeechModels.cs.
+
+Faster-Whisper: SYSTRAN, MIT; CTranslate2: OpenNMT, MIT; Whisper weights: OpenAI, MIT.
+https://github.com/SYSTRAN/faster-whisper
+https://github.com/OpenNMT/CTranslate2
+https://huggingface.co/Systran/faster-whisper-tiny.en
+https://huggingface.co/Systran/faster-whisper-base.en
+CTranslate2 weights are converted OpenAI Whisper models; runtime INT8 is used on CPU and INT8/FP16 on CUDA.
+
+Managed worker runtime: pinned Python 3.12.10 embeddable distribution (PSF License) and upstream PyPI wheels. Full package metadata/licenses remain in the extracted per-user cache. No Python installation, pip invocation, global PATH modification or model-host connection is needed for inference. The shared CPU/runtime archive set is 91,519,645 bytes. NVIDIA CUDA cuBLAS/cuDNN optional wheels (1,076,821,750 bytes total) use NVIDIA's redistribution terms; notices/licenses remain in their extracted cache. Neither runtime nor optional weights/libraries are embedded in Setup.

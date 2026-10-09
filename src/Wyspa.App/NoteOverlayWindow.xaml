@@ -7,7 +7,7 @@
             <WrapPanel><Button Content="Start" Command="{Binding StartCommand}" Style="{StaticResource PrimaryButton}" ToolTip="Start recording a conversation using the configured microphone and capture sources." /><Button Content="{Binding PauseText}" Command="{Binding PauseCommand}" ToolTip="Pause or resume conversation recording without ending the session." /><Button Content="Stop" Command="{Binding StopCommand}" ToolTip="Finish recording. Pending transcription continues until captured audio has been processed." /><Button Content="Summarise" Command="{Binding SummariseCommand}" ToolTip="Send this transcript to the selected Groq summary model to generate a summary." /></WrapPanel>
             <TextBlock Text="{Binding Status}" Style="{StaticResource BodyText}" FontSize="11"/>
             <TextBlock Text="{Binding Error}" Foreground="{DynamicResource WarnBrush}" TextWrapping="Wrap" FontSize="11"/>
-            <Button Content="Cancel pending transcription" Command="{Binding CancelPendingCommand}" HorizontalAlignment="Left" ToolTip="Cancel outstanding conversation transcription requests. Already received text remains available.">
+            <Button Content="Cancel pending transcription" Command="{Binding CancelPendingCommand}" HorizontalAlignment="Left" ToolTip="Cancel first-use speaker downloads or outstanding conversation transcription requests. Already received text remains available.">
                 <Button.Style><Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Setter Property="Visibility" Value="Visible"/><Style.Triggers><Trigger Property="IsEnabled" Value="False"><Setter Property="Visibility" Value="Collapsed"/></Trigger></Style.Triggers></Style></Button.Style>
             </Button>
         </StackPanel>

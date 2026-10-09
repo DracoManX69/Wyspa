@@ -5,7 +5,7 @@ using Wyspa.Core.Abstractions;
 
 namespace Wyspa.Core.Services;
 
-public sealed class VideoImporter(string toolDirectory) : IVideoImporter
+public sealed class VideoImporter(string toolDirectory, OptionalDependencyStore? dependencies = null) : IVideoImporter
 {
     public static string NormalizeUrl(string value)
     {
@@ -32,8 +32,9 @@ public sealed class VideoImporter(string toolDirectory) : IVideoImporter
         var downloader = Path.Combine(toolDirectory, "yt-dlp.exe");
         var ffmpeg = Path.Combine(toolDirectory, "ffmpeg.exe");
         var deno = Path.Combine(toolDirectory, "deno.exe");
-        if (!File.Exists(downloader) || !File.Exists(ffmpeg) || !File.Exists(deno))
+        if (!File.Exists(downloader) || !File.Exists(ffmpeg))
             throw new InvalidOperationException("YouTube tools are missing. Reinstall the complete Wyspa v7 package.");
+        deno = await (dependencies ?? OptionalDependencyStore.Default).EnsureAsync(OptionalDependencyStore.Deno, deno, progress, token);
         var directory = Path.Combine(Path.GetTempPath(), "Wyspa", "video-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         try

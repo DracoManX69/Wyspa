@@ -1,12 +1,27 @@
 # WyspaFluent
 
-Wyspa is a lightweight Windows dictation app. It runs in the system tray, records short microphone clips, sends them to Groq for transcription, and inserts the resulting text into the active app.
+Wyspa is a Windows dictation app that runs in the system tray and inserts transcribed speech into the active app. It supports managed local speech models and optional Groq cloud transcription.
 
-Wyspa is designed for people who want fast speech-to-text without a heavyweight desktop client. Transcription is handled by Groq, so the local app stays small.
+Fresh installations work locally with an included small English model, without an account or required training. Optional models, runtimes and GPU libraries are managed inside the app and downloaded when needed.
 
 ## 🚨 VIBE CODE ALERT 🚨
 
 Wyspa was written effectively entirely by Codex with some cleaver interfacing with the app to get it to work pretty well. This vibe code disclosure is basically the only thing human authored. Codex did the rest of this repo too :)
+
+## New in v0.9.5
+
+Fresh installs include **Zipformer English 20M (45.2 MB)** and start with local Stream Mode, with no account or required training. **Settings → Local models → Model Manager** offers 25 choices: the included model, 15 Whisper variants, Parakeet v2/v3 and Redux, Moonshine Tiny/Base, SenseVoice, Faster-Whisper Tiny/Base English and a larger streaming Zipformer. Model weights are under 1.5 GB; optional shared runtimes/GPU libraries have separate download sizes. Downloads are verified and have per-model progress, install/remove and batch actions.
+
+**Compare Models** tests every installed model, with separate supported CPU/GPU results when GPU permission is enabled, scores and a highlighted winner. Optional Groq comparison uses the best local result. GPU permission allows compatible Vulkan/CUDA processing; measurements and failures can still select CPU. Optional voice setup remains available.
+
+**Personal wake setup** is a popup wizard for SmartListen. Fourteen alternating wake/non-wake readings include three isolated phrase samples, varied requests and similar-word negatives. Wyspa learns pronunciation variants, adjusts strictness and checks fresh recordings before applying the profile. Samples can finish after a natural pause. Wake detection remains local and independent of the selected dictation model. It is experimental; controlled tests do not establish universal accuracy.
+
+A single configurable hotkey follows Toggle, Hold to Talk or SmartListen. Media Handling applies to hotkey-owned sessions, and SmartListen-specific controls appear only in that mode. Wake recordings stop using speech activity and the configured silence interval.
+
+Local mode covers dictation, SmartListen, Stream Mode, Scratchpad, Audio Files, Conversation and YouTube transcription. Groq-only summaries, Tone Re-write, AI intent interpretation and Stream Fix remain cloud features and are bypassed in local mode. Existing installations retain their selected provider and saved settings.
+
+[Local setup](docs/LOCAL_MODELS.md) · [Local performance research](docs/LOCAL_PERFORMANCE_RESEARCH.md) · [Wake performance research](docs/WAKE_PERFORMANCE_RESEARCH.md) · [0.9.5 validation](docs/V095_VALIDATION.md).
+
 
 ## New in v0.9.4
 
@@ -40,17 +55,17 @@ Groq's Whisper API transcribes completed audio uploads. Stream Mode provides nea
 ## Introduced in v0.8
 
 - **WyspaFluent:** a Fluent-inspired interface with clearer sections, improved contrast, consistent controls, and a GitHub About link.
-- **Getting Started:** Home explains Groq account and API key setup; Conversation includes a shortcut to its settings.
+- **Getting Started:** Home starts with local dictation and explains optional Groq setup; Conversation includes a shortcut to its settings.
 - **SmartListen:** the new name for AutoCapture. The SmartListen Threshold meter lets you check microphone volume before enabling automatic capture.
 - **Look & Feel:** choose Dark, Light, or System, and configure the recording overlay in one place. Preferences save automatically.
 - **Automatic runtime setup:** when the required x64 .NET 10 Desktop Runtime is missing, the installer downloads and verifies the latest stable compatible version from Microsoft, installs it, and continues in the same wizard.
 
 ## Conversation and YouTube features
 
-- **YouTube**: paste a public or unlisted single-video URL (including Shorts and completed broadcasts). Wyspa downloads its audio, splits long recordings into five-minute parts, transcribes with your saved Groq key, and saves the text. No playlists or signed-in videos.
+- **YouTube**: paste a public or unlisted single-video URL (including Shorts and completed broadcasts). Wyspa downloads its audio, splits long recordings into parts, transcribes using your selected local/Groq provider, and saves the text. No playlists or signed-in videos.
 - **Conversation**: choose Computer call or In-person. Calls label your microphone as You and the other source as Other side; choose an output device or, on supported Windows versions, a calling app and its child processes.
 - **Live notes overlay**: movable, resizable, always on top, with Start, Pause/Resume, Stop, and Summarise. Messages appear as responses arrive and are ordered using speech timestamps. Your messages appear on the right.
-- **Room speaker identification (experimental)**: bundled local models identify anonymous voices across short audio windows. Choose My room speaker to put your messages on the right. Adjust speaker matching and speech sensitivity in Conversation settings. Speaker labels can be wrong on short, noisy, or overlapping speech; uncertain speech is explicitly labelled.
+- **Room speaker identification (experimental)**: local models downloaded on first use identify anonymous voices across short audio windows. Choose My room speaker to put your messages on the right. Adjust speaker matching and speech sensitivity in Conversation settings. Speaker labels can be wrong on short, noisy, or overlapping speech; uncertain speech is explicitly labelled.
 - **Summaries**: use the existing saved Groq key and the summary model selected in Settings → Groq (default `openai/gpt-oss-20b`). Long conversations are summarised in parts and combined without silently dropping the end. Summarise while recording to capture the transcript available at that time, or after Stop for the finished session.
 - **Persistent notes**: conversations appear in Saved conversations and YouTube imports in Saved videos and are written to `%AppData%\Wyspa\Notes` as JSON and readable TXT copies. Audio is temporary and removed after processing, cancellation, or failure. The dictation audio-retention setting does not control conversation or YouTube notes.
 
@@ -65,13 +80,13 @@ For YouTube, paste a video URL and select Transcribe video. Completed passages s
 - Windows tray app with compact settings UI.
 - Toggle, hold-to-talk, and SmartListen trigger modes.
 - Configurable global hotkey, including macro keys such as `F13`-`F24`.
-- Optional SmartListen media handling to mute system output or send play/pause while listening.
+- Optional hotkey-only media handling: mute output or pause supported playing media during a hotkey session, restoring only what Wyspa changed. Settings/practice/manual recordings leave playback alone.
 - Groq Whisper transcription using `whisper-large-v3-turbo`.
 - Optional Groq writing cleanup with Formal, Casual, and Technical tones plus editable re-write prompts.
 - Optional Groq intent model for commands such as copy, paste, Enter, Escape, task view, and related actions.
 - In-app GitHub update check with a direct update download button when a newer installer is available.
 - Paste or type insertion modes.
-- Getting Started guidance for Groq account and API key setup.
+- Getting Started guidance for local dictation and optional Groq setup.
 - Audio Files section for local file selection, lossless WAV/AIFF compression, batch transcription, cancellation, and copy/save.
 - Live recording overlay with voice waveform and adjustable transparency.
 - Saved Dark, Light, or System theme selection.
@@ -84,46 +99,44 @@ For normal use:
 
 - Windows 10 or later, x64.
 - Microsoft .NET 10 Desktop Runtime x64; setup installs it automatically if missing.
-- A Groq API key.
+- Optional: a Groq API key for cloud transcription/features.
 - A working microphone for dictation (not needed for file transcription).
-- Internet access for Groq transcription.
+- Internet access for optional downloads, missing runtime prerequisites and Groq/cloud features. Installed local models work offline.
 
 For development:
 
 - .NET 10 SDK.
 - PowerShell.
-- Python 3.11+ once at build time to prepare the pinned video tools and speaker models (`python scripts/prepare-v7-tools.py`). End users do not need Python.
+- Python 3.11+ once at build time to prepare the pinned media tools (`python scripts/prepare-v7-tools.py`). End users do not need Python.
 - Inno Setup 6.7.3 or newer if you want to build the installer.
 
 ## Download And Install
 
-Download the [v0.8 Windows installer](https://github.com/DracoManX69/Wyspa/releases/download/v0.8/WyspaSetup-0.8.0-win-x64.exe) from the [GitHub release](https://github.com/DracoManX69/Wyspa/releases/tag/v0.8):
+Download the [v0.9.5 Windows installer](https://github.com/DracoManX69/Wyspa/releases/download/v0.9.5/WyspaSetup-0.9.5-win-x64.exe) from the [GitHub release](https://github.com/DracoManX69/Wyspa/releases/tag/v0.9.5):
 
 ```text
-WyspaSetup-0.8.0-win-x64.exe
+WyspaSetup-0.9.5-win-x64.exe
 ```
 
 Run the installer and follow the wizard. The installer places Wyspa in your user profile by default, offers Start Menu and desktop shortcut options, and registers Wyspa in Windows Apps & Features.
 
 To update Wyspa, run the newer setup EXE directly over the existing install. You do not need to uninstall first; the installer keeps your settings and saved Groq key.
 
-The installer checks for a stable .NET 10 Desktop Runtime x64. If it is missing, setup downloads the latest compatible 10.0 servicing release from Microsoft, checks its SHA-512 and Microsoft signature, and runs the runtime installer while Wyspa Setup remains open. Allow the Windows administrator prompt for this machine-wide prerequisite; Wyspa itself installs per-user. Setup then continues automatically. An existing compatible runtime requires no download. Internet access is needed for a missing runtime; cancellation or failure offers a retry without installing Wyspa prematurely. The shared runtime is not removed when uninstalling Wyspa.
+The installer checks for a stable .NET 10 Desktop Runtime x64. If it is missing, setup downloads the latest compatible 10.0 servicing release from Microsoft, checks its SHA-512 and Microsoft signature, and runs the runtime installer while Wyspa Setup remains open. Allow the Windows administrator prompt for this machine-wide prerequisite; Wyspa itself installs per-user. Setup then continues automatically. An existing compatible runtime requires no download. Internet access is needed for a missing runtime; cancellation or failure offers a retry without installing Wyspa prematurely. The shared runtime is not removed when uninstalling Wyspa. The x64 Microsoft C++ prerequisite is likewise downloaded, hash/signature checked, and installed inside the wizard only when missing.
 
 ## First Run
 
-1. Launch Wyspa.
-2. Open Settings → Groq.
-3. Paste your Groq API key.
-4. Click Save and test key.
-5. Choose your microphone in Settings → Audio & Capture.
-6. Set your preferred trigger mode and hotkey.
-7. Optional: in Settings → Audio & Capture, choose whether SmartListen should leave media alone, mute system output, or send play/pause while listening.
-8. Optional: enable Groq writing cleanup in Settings → Experimental and choose Formal, Casual, or Technical tone.
-9. Open Notepad or another text field and try a short dictation.
+1. Launch Wyspa and let the included local model prepare in the background.
+2. Use the Windows default microphone, or choose one in Settings → Audio & Capture and check its level.
+3. Focus a text field and use the displayed shortcut to start and stop dictation.
+4. Optional: change the local model, GPU preference or voice setup in Settings → Local models.
+5. Optional: connect a Groq key in Settings → Groq and turn local transcription off to use cloud processing.
+
+Existing installations retain their saved provider and model. No voice profile is required. Microphone capture begins only when activated by the user.
 
 ## Settings and model discovery
 
-The sidebar has Home, Audio Files, Conversation, YouTube, and Settings. Settings sections are Groq, Conversation, Audio & Capture, Look & Feel, Privacy, System, and Experimental, in that order. Experimental contains Wake Voice, Tone Re-write and its model, and Spoken Actions and its model. Look & Feel includes Theme and Overlay settings. Configuration changes save automatically; API keys and shortcuts have explicit save buttons.
+The sidebar has Home, Audio Files, Conversation, YouTube, and Settings. Settings sections are Local models, Groq, Conversation, Audio & Capture, Look & Feel, Privacy, System, and Experimental, in that order. Experimental contains Wake Voice, Tone Re-write and its model, and Spoken Actions and its model. Look & Feel includes Theme and Overlay settings. Configuration changes save automatically; API keys and shortcuts have explicit save buttons.
 
 Settings → Groq loads the model list on first opening with a saved key. **Save and test key** also loads it, and **Refresh models** requests a fresh list without making an inference call. Speech-to-text choices are separate from the text models used for summaries, re-writing, and spoken action detection. The Refresh models button in Groq updates the selectors in both Groq and Experimental. The transcription and summary dropdowns in Groq and the re-write and spoken-action dropdowns in Experimental use the current active IDs returned by [Groq's models endpoint](https://console.groq.com/docs/models).
 
@@ -208,7 +221,7 @@ Wyspa sends microphone audio for each dictation to Groq, along with the selected
 
 When you use Check for Updates, Wyspa calls the public GitHub latest-release endpoint for this repository and compares the latest release version with the installed app version.
 
-Wyspa does not take screenshots, capture active-window contents, record keystroke history, or intentionally log transcripts. SmartListen media handling only uses Windows output mute state or the standard media play/pause key; it does not inspect what you are playing. See [docs/PRIVACY.md](docs/PRIVACY.md) for details.
+Wyspa does not take screenshots, capture active-window contents, record keystroke history, or intentionally log transcripts. Hotkey media handling reads Windows output mute state or media-session playback status. It does not retrieve track titles or media content; it resumes only sessions Wyspa paused. See [docs/PRIVACY.md](docs/PRIVACY.md) for details.
 
 ## Uninstall
 
@@ -264,3 +277,9 @@ Look & Feel now includes a Windows notifications switch that silences all Wyspa 
 ### v0.9.4 tester polish
 
 Settings help now works on hover, click and keyboard activation, with consistent wrapped tooltips across the main workflows. Empty help icons are hidden. Header/navigation surfaces are neutral grey in Light and Dark, while controls retain the Windows accent colour. The app icon keeps its original colours.
+
+Installer size: .NET and C++ runtime installers are downloaded only when missing. Optional Deno YouTube support and speaker models download and verify themselves at first use, then remain cached locally. The small default dictation model remains included for immediate local use. Shared FFmpeg decoding libraries, ffprobe, FLAC, CPU fallback and GPU inference libraries remain included because active features use them. Unused ffplay is excluded from the published app; FLAC’s source archive and license notices remain included.
+
+Local model advice: Settings → Local models analyses CPU, RAM and Vulkan GPU/device memory and suggests a compact starting model. Test installed models locally, or explicitly compare the same included English sample with Groq, to see typical/first-test latency, throughput, CPU work, app RAM and sample errors. Apply is explicit; saved results are invalidated by hardware/driver/GPU changes. Conversation uses the same selected transcription model; in-person speaker labels still require separate small segmentation/embedding models, downloaded on demand.
+
+Wake phrase: Experimental → Wake Voice now uses a small local English keyword spotter. Set the phrase, add repeated wake and ordinary-speech examples, apply suggested strictness when the examples separate, and explicitly Arm hands-free dictation. Say the phrase, wait for the ready tone, then speak; silence stops and rearms it. The prior acoustic voice-similarity gate is not used for activation. Calibration stores threshold statistics and discards recordings; it does not guarantee 99.99% accuracy.

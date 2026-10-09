@@ -25,6 +25,7 @@ public sealed class NotesViewModel : ViewModelBase
 {
     private readonly IConversationCapture _capture;
     private readonly ISpeakerIdentifier _speakers;
+    private CancellationTokenSource? _startingCancellation;
     private readonly INoteIntelligence _groq;
     private readonly ISecretStore _secrets;
     private readonly INoteStore _store;
@@ -73,7 +74,7 @@ public sealed class NotesViewModel : ViewModelBase
         StartCommand = new AsyncRelayCommand(StartAsync, () => CanConfigure && !IsVideoLibrary);
         PauseCommand = new AsyncRelayCommand(PauseResumeAsync, () => IsActive && !_transition);
         StopCommand = new AsyncRelayCommand(StopAsync, () => IsActive && !_transition);
-        CancelPendingCommand = new AsyncRelayCommand(() => { _sessionCancellation?.Cancel(); return Task.CompletedTask; }, () => _finishing);
+        CancelPendingCommand = new AsyncRelayCommand(() => { _startingCancellation?.Cancel(); _sessionCancellation?.Cancel(); return Task.CompletedTask; }, () => _finishing || _startingCancellation is not null);
         SummariseCommand = new AsyncRelayCommand(() => _summaryTask = SummariseAsync(), () => SelectedNote?.Entries.Any(e => !e.IsError) == true && !_summarising && !_importing);
         CancelSummaryCommand = new AsyncRelayCommand(() => { _summaryCancellation?.Cancel(); return Task.CompletedTask; }, () => _summarising);
         ImportCommand = new AsyncRelayCommand(() => _importTask = ImportAsync(), () => IsVideoLibrary && CanConfigure && !string.IsNullOrWhiteSpace(Url));
@@ -206,22 +207,26 @@ public sealed class NotesViewModel : ViewModelBase
         if (!CanConfigure || IsVideoLibrary) return;
         _transition = true; Changed(); Error = "";
         var reserved = false;
+        using var preparation = new CancellationTokenSource(); _startingCancellation = preparation; Changed();
         try
         {
-            _key = await RequireKeyAsync(CancellationToken.None);
+            _key = await RequireKeyAsync(preparation.Token);
             var settings = _settings();
             if (settings.NoteMode == ConversationMode.ComputerCall && settings.NoteAudioMode == CallAudioMode.Application &&
                 (!SupportsApplicationCapture || SelectedApplication is null))
                 throw new InvalidOperationException(SupportsApplicationCapture ? "Choose the calling app, or switch to Output device." : "App capture requires Windows build 20348 or newer. Choose Output device.");
-            _options = new(settings.ModelId, settings.Language, settings.CustomPrompt);
+            _options = new(settings.ModelId, settings.Language, settings.CustomPrompt, UseLocal: settings.UseLocalTranscription, LocalModelId: settings.LocalModelId);
             _sessionMode = settings.NoteMode;
             _captureOptions = CaptureOptions();
             if (_sessionMode == ConversationMode.InPerson)
             {
                 Status = "Loading local speaker models…";
-                await _speakers.InitializeAsync(CancellationToken.None); _speakers.Reset();
+                await _speakers.InitializeAsync(preparation.Token, new Progress<string>(message =>
+                { if (!preparation.IsCancellationRequested && _transition) Status = message; })); _speakers.Reset();
             }
+            preparation.Token.ThrowIfCancellationRequested();
             await _saveSettings();
+            preparation.Token.ThrowIfCancellationRequested();
             await _reserveMicrophone(true); reserved = true;
             _activeNote = new NoteSession { Title = "Conversation " + DateTime.Now.ToString("dd MMM HH:mm"), Kind = _sessionMode == ConversationMode.ComputerCall ? "Computer call" : "In-person", MySpeaker = _sessionMode == ConversationMode.ComputerCall ? "You" : null };
             await _store.SaveAsync(_activeNote);
@@ -231,11 +236,12 @@ public sealed class NotesViewModel : ViewModelBase
             _workers = [ProcessQueueAsync(_sessionCancellation.Token), ProcessQueueAsync(_sessionCancellation.Token)];
             IsActive = true; IsPaused = false; _clock.Restart();
             await _capture.StartAsync(_captureOptions, 0, _sessionCancellation.Token);
-            Status = "Listening · live passages appear as Groq returns them.";
+            preparation.Token.ThrowIfCancellationRequested();
+            Status = _options.UseLocal ? "Listening · local passages appear as this PC transcribes them." : "Listening · live passages appear as Groq returns them.";
         }
         catch (Exception ex)
         {
-            Error = Friendly(ex);
+            Error = ex is OperationCanceledException && preparation.IsCancellationRequested ? "Speaker setup cancelled. Select Start to retry when ready." : Friendly(ex);
             try { await _capture.StopAsync(); } catch (Exception stopError) { Error += " " + Friendly(stopError); }
             _queue?.Writer.TryComplete();
             if (_workers.Length > 0) await Task.WhenAll(_workers);
@@ -244,7 +250,7 @@ public sealed class NotesViewModel : ViewModelBase
             if (reserved) await _reserveMicrophone(false);
             Status = "Could not start. Check the message above and try again.";
         }
-        finally { _transition = false; Changed(); }
+        finally { _startingCancellation = null; _transition = false; Changed(); }
     }
     private ConversationCaptureOptions CaptureOptions()
     {
@@ -431,7 +437,7 @@ public sealed class NotesViewModel : ViewModelBase
             var url = VideoImporter.NormalizeUrl(Url);
             var key = await RequireKeyAsync(cancellation.Token);
             var settings = _settings();
-            var options = new TranscriptionOptions(settings.ModelId, settings.Language, settings.CustomPrompt);
+            var options = new TranscriptionOptions(settings.ModelId, settings.Language, settings.CustomPrompt, UseLocal: settings.UseLocalTranscription, LocalModelId: settings.LocalModelId);
             using var video = await _video.PrepareAsync(url, new Progress<string>(message => { if (_importing) VideoStatus = message; }), cancellation.Token);
             note = new NoteSession { Title = video.Title, Kind = "YouTube", SourceUrl = url };
             await _store.SaveAsync(note);
@@ -461,12 +467,12 @@ public sealed class NotesViewModel : ViewModelBase
         catch (Exception ex) { Error = Friendly(ex); }
     }
     private async Task<string> RequireKeyAsync(CancellationToken token)
-        => await _secrets.GetApiKeyAsync(token) is { Length: > 0 } key ? key : throw new InvalidOperationException("Save and test your Groq key in Settings → Groq first.");
+        => _settings().UseLocalTranscription ? "" : await _secrets.GetApiKeyAsync(token) is { Length: > 0 } key ? key : throw new InvalidOperationException("Save and test your Groq key in Settings → Groq first.");
     public string ExportSelected() => SelectedNote is { } note ? NoteStore.Export(note) : "";
     public async Task ShutdownAsync()
     {
         _shuttingDown = true;
-        _importCancellation?.Cancel(); _summaryCancellation?.Cancel();
+        _startingCancellation?.Cancel(); _importCancellation?.Cancel(); _summaryCancellation?.Cancel();
         if (_startingTask is not null) await _startingTask;
         if (_pauseTask is not null) await _pauseTask;
         if (_importTask is not null) await _importTask;

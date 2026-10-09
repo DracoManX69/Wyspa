@@ -1,5 +1,5 @@
-using System.Runtime.InteropServices;
 using NAudio.CoreAudioApi;
+using Windows.Media.Control;
 using Wyspa.Core.Abstractions;
 using Wyspa.Core.Models;
 
@@ -7,178 +7,67 @@ namespace Wyspa.Infrastructure.Media;
 
 public sealed class WindowsAutoCaptureMediaControlService : IAutoCaptureMediaControlService
 {
-    private readonly object _gate = new();
-    private AutoCaptureMediaBehavior _activeBehavior = AutoCaptureMediaBehavior.None;
+    private readonly SemaphoreSlim _gate = new(1, 1);
+    private AutoCaptureMediaBehavior _activeBehavior;
     private bool? _previousMuteState;
+    private readonly List<GlobalSystemMediaTransportControlsSession> _paused = [];
 
-    public Task SetListeningStateAsync(AutoCaptureMediaBehavior behavior, bool isListening, CancellationToken cancellationToken)
+    public async Task SetListeningStateAsync(AutoCaptureMediaBehavior behavior, bool isListening, CancellationToken token)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-        lock (_gate)
+        await _gate.WaitAsync(token);
+        try
         {
-            if (_activeBehavior is not AutoCaptureMediaBehavior.None && (!isListening || behavior != _activeBehavior))
-            {
-                RestoreActiveBehavior();
-            }
-
-            if (!isListening || behavior is AutoCaptureMediaBehavior.None || _activeBehavior == behavior)
-            {
-                return Task.CompletedTask;
-            }
-
-            ApplyBehavior(behavior);
+            if (_activeBehavior != AutoCaptureMediaBehavior.None && (!isListening || behavior != _activeBehavior)) await RestoreCoreAsync(token);
+            if (!isListening || behavior == AutoCaptureMediaBehavior.None || _activeBehavior == behavior) return;
             _activeBehavior = behavior;
-        }
-
-        return Task.CompletedTask;
-    }
-
-    public Task RestoreAsync(CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        lock (_gate)
-        {
-            RestoreActiveBehavior();
-        }
-
-        return Task.CompletedTask;
-    }
-
-    private void ApplyBehavior(AutoCaptureMediaBehavior behavior)
-    {
-        switch (behavior)
-        {
-            case AutoCaptureMediaBehavior.MuteSystemOutput:
-                _previousMuteState = GetSystemMute();
-                SetSystemMute(mute: true);
-                break;
-            case AutoCaptureMediaBehavior.TogglePlayPause:
-                SendPlayPause();
-                break;
-            case AutoCaptureMediaBehavior.None:
-            default:
-                break;
-        }
-    }
-
-    private void RestoreActiveBehavior()
-    {
-        switch (_activeBehavior)
-        {
-            case AutoCaptureMediaBehavior.MuteSystemOutput:
-                if (_previousMuteState.HasValue)
-                {
-                    SetSystemMute(_previousMuteState.Value);
-                }
-
-                break;
-            case AutoCaptureMediaBehavior.TogglePlayPause:
-                SendPlayPause();
-                break;
-            case AutoCaptureMediaBehavior.None:
-            default:
-                break;
-        }
-
-        _activeBehavior = AutoCaptureMediaBehavior.None;
-        _previousMuteState = null;
-    }
-
-    private static bool GetSystemMute()
-    {
-        using var enumerator = new MMDeviceEnumerator();
-        using var device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
-        return device.AudioEndpointVolume.Mute;
-    }
-
-    private static void SetSystemMute(bool mute)
-    {
-        using var enumerator = new MMDeviceEnumerator();
-        using var device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
-        device.AudioEndpointVolume.Mute = mute;
-    }
-
-    private static void SendPlayPause()
-    {
-        var inputs = new[]
-        {
-            Input.Keyboard(VirtualKeyMediaPlayPause, 0),
-            Input.Keyboard(VirtualKeyMediaPlayPause, KeyEventKeyUp)
-        };
-
-        var sent = SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<Input>());
-        if (sent != inputs.Length)
-        {
-            throw new InvalidOperationException("Could not send the Windows media play/pause key.");
-        }
-    }
-
-    private const ushort VirtualKeyMediaPlayPause = 0xB3;
-    private const uint KeyEventKeyUp = 0x0002;
-    private const int InputKeyboard = 1;
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern uint SendInput(uint inputCount, Input[] inputs, int inputSize);
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct Input
-    {
-        public int Type;
-        public InputUnion Data;
-
-        public static Input Keyboard(ushort virtualKey, uint flags) => new()
-        {
-            Type = InputKeyboard,
-            Data = new InputUnion
+            try
             {
-                Keyboard = new KeyboardInput
+            if (behavior == AutoCaptureMediaBehavior.MuteSystemOutput)
+            {
+                using var enumerator = new MMDeviceEnumerator();
+                using var device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+                _previousMuteState = device.AudioEndpointVolume.Mute; device.AudioEndpointVolume.Mute = true;
+            }
+            else
+            {
+                // Pause only sessions that report playing, never a blind play/pause key.
+                var manager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync().AsTask(token);
+                foreach (var session in manager.GetSessions())
                 {
-                    VirtualKey = virtualKey,
-                    Flags = flags
+                    try
+                    {
+                        if (session.GetPlaybackInfo().PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing && await session.TryPauseAsync().AsTask(token)) _paused.Add(session);
+                    }
+                    catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or InvalidOperationException) { }
                 }
             }
-        };
+            }
+            catch { await RestoreCoreAsync(CancellationToken.None); throw; }
+        }
+        finally { _gate.Release(); }
     }
-
-    [StructLayout(LayoutKind.Explicit)]
-    private struct InputUnion
+    public async Task RestoreAsync(CancellationToken token)
     {
-        [FieldOffset(0)]
-        public MouseInput Mouse;
-
-        [FieldOffset(0)]
-        public KeyboardInput Keyboard;
-
-        [FieldOffset(0)]
-        public HardwareInput Hardware;
+        await _gate.WaitAsync(token);
+        try { await RestoreCoreAsync(token); }
+        finally { _gate.Release(); }
     }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct MouseInput
+    private async Task RestoreCoreAsync(CancellationToken token)
     {
-        public int X;
-        public int Y;
-        public uint MouseData;
-        public uint Flags;
-        public uint Time;
-        public IntPtr ExtraInfo;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct KeyboardInput
-    {
-        public ushort VirtualKey;
-        public ushort ScanCode;
-        public uint Flags;
-        public uint Time;
-        public IntPtr ExtraInfo;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct HardwareInput
-    {
-        public uint Message;
-        public ushort ParamLow;
-        public ushort ParamHigh;
+        if (_activeBehavior == AutoCaptureMediaBehavior.MuteSystemOutput && _previousMuteState is { } previous)
+        {
+            using var enumerator = new MMDeviceEnumerator();
+            using var device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+            device.AudioEndpointVolume.Mute = previous;
+        }
+        foreach (var session in _paused)
+        {
+            try
+            {
+                if (session.GetPlaybackInfo().PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Paused) await session.TryPlayAsync().AsTask(token);
+            }
+            catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or InvalidOperationException) { }
+        }
+        _paused.Clear(); _previousMuteState = null; _activeBehavior = AutoCaptureMediaBehavior.None;
     }
 }

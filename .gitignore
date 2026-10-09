@@ -19,3 +19,8 @@ VoxType-v1-working/
 Wyspa-v2-working/
 Wyspa-v3-working/
 Wyspa-v4-working/
+
+installer/prerequisites/
+# Downloaded, checksum-pinned default speech model (prepare-local-model.ps1)
+src/Wyspa.App/Tools/LocalDefault/*.onnx
+src/Wyspa.App/Tools/LocalDefault/tokens.txt

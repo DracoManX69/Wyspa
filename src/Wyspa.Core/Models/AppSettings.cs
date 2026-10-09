@@ -2,6 +2,12 @@ namespace Wyspa.Core.Models;
 
 public sealed class AppSettings
 {
+    public SpeechPerformanceReport? SpeechPerformance { get; set; }
+    public bool LocalDefaultsInitialized { get; set; }
+    public bool LocalGpuEnabled { get; set; } = true;
+    public LocalVoiceProfile? LocalVoiceProfile { get; set; }
+    public bool UseLocalTranscription { get; set; }
+    public string LocalModelId { get; set; } = "base.en";
     public bool FirstRunComplete { get; set; }
     public string? MicrophoneDeviceId { get; set; }
     public HotkeySettings Hotkey { get; set; } = HotkeySettings.Default;
@@ -37,8 +43,9 @@ public sealed class AppSettings
     public int AutoCaptureMinSpeechMs { get; set; } = 650;
     public bool AutoCaptureListeningEnabled { get; set; } = true;
     public AutoCaptureMediaBehavior AutoCaptureMediaBehavior { get; set; } = AutoCaptureMediaBehavior.None;
+    public string AutoCaptureWakePhrase { get; set; } = "hey whisper";
     public bool AutoCaptureWakeVoiceEnabled { get; set; }
-    public double AutoCaptureWakeVoiceSensitivity { get; set; } = 0.62;
+    public double AutoCaptureWakeVoiceSensitivity { get; set; } = 0.3;
     public WakeVoiceProfile? AutoCaptureWakeVoiceProfile { get; set; }
     public bool WakeToneEnabled { get; set; } = true;
     public string? WakeTonePath { get; set; }

@@ -1,10 +1,11 @@
 using SherpaOnnx;
 using Wyspa.Core.Abstractions;
 using Wyspa.Core.Models;
+using Wyspa.Core.Services;
 
 namespace Wyspa.Infrastructure.Audio;
 
-public sealed class LocalSpeakerIdentifier(string modelDirectory, Func<double> threshold) : ISpeakerIdentifier
+public sealed class LocalSpeakerIdentifier(string modelDirectory, Func<double> threshold, OptionalDependencyStore? dependencies = null) : ISpeakerIdentifier
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
     private OfflineSpeakerDiarization? _diarizer;
@@ -12,16 +13,16 @@ public sealed class LocalSpeakerIdentifier(string modelDirectory, Func<double> t
     private readonly List<float[]> _voices = [];
     private float[] _history = [];
     private IReadOnlyList<SpeakerTurn> _historyTurns = [];
-    public async Task InitializeAsync(CancellationToken token)
+    public async Task InitializeAsync(CancellationToken token, IProgress<string>? progress = null)
     {
         await _gate.WaitAsync(token);
         try
         {
             if (_diarizer is not null) return;
-            var segmentation = Path.Combine(modelDirectory, "segmentation.onnx");
-            var embedding = Path.Combine(modelDirectory, "embedding.onnx");
-            if (!File.Exists(segmentation) || !File.Exists(embedding))
-                throw new InvalidOperationException("The local speaker models are missing. Reinstall the complete Wyspa v7 package to use in-person mode.");
+            var store = dependencies ?? OptionalDependencyStore.Default;
+            var segmentation = await store.EnsureAsync(OptionalDependencyStore.Segmentation, Path.Combine(modelDirectory, "segmentation.onnx"), progress, token);
+            var embedding = await store.EnsureAsync(OptionalDependencyStore.Embedding, Path.Combine(modelDirectory, "embedding.onnx"), progress, token);
+            progress?.Report("Loading local speaker models…");
             await Task.Run(() =>
             {
                 var config = new OfflineSpeakerDiarizationConfig();

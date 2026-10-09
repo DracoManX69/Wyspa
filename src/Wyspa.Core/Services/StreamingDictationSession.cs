@@ -17,7 +17,12 @@ public sealed class StreamingDictationSession : IDisposable
     private Exception? _captureError;
     private string _pendingDelta = "";
     private string? _finalText;
-    public string Text => _finalText ?? _transcript.Text;
+    private ILocalRecognitionStream? _localStream;
+    private string _localText = "";
+    private string _localPublished = "";
+    private bool _localFinished;
+    public bool IsContinuousLocal => _groq is ILocalStreamingProvider provider && provider.SupportsLocalStream(_options);
+    public string Text => _finalText ?? (IsContinuousLocal ? _localText : _transcript.Text);
     public event EventHandler<bool>? RequestActivityChanged;
 
     public StreamingDictationSession(IGroqTranscriptionClient groq, string key, TranscriptionOptions options,
@@ -40,11 +45,16 @@ public sealed class StreamingDictationSession : IDisposable
         await _gate.WaitAsync(token);
         try
         {
+            if (IsContinuousLocal)
+            {
+                await ProcessLocalAsync(stopped, token);
+                return;
+            }
             // A clipboard failure or cancellation before injection must not lose a
             // prefix already accepted by the recognizer. Native insertion never
             // throws after sending text; a partial send returns clipboard-only.
             await PublishPendingAsync(token);
-            if (stopped)
+            if (stopped && !_options.UseLocal)
             {
                 _finalText = await TranscribeCompleteAudioAsync(token);
                 var tail = StreamTextReconciliation.AppendOnlyTail(_transcript.Text, _finalText);
@@ -101,9 +111,42 @@ public sealed class StreamingDictationSession : IDisposable
                 }
                 finally { File.Delete(path); }
             } while (stopped && _start < _audio.SampleCount);
+            if (stopped && _options.UseLocal) _finalText = _transcript.Text;
             if (stopped && Text.Length > 0) await _publish("", Text, token);
         }
         finally { _gate.Release(); }
+    }
+
+    private async Task ProcessLocalAsync(bool stopped, CancellationToken token)
+    {
+        if (_captureError is not null) throw new IOException("Local stream audio could not be buffered.", _captureError);
+        _localStream ??= await ((ILocalStreamingProvider)_groq).CreateLocalStreamAsync(_options, token);
+        // Retry delivery before consuming more audio. Each PCM sample is fed to
+        // the recurrent recognizer once; stopping only flushes the remaining tail.
+        await PublishLocalAsync(token);
+        var target = _audio.SampleCount;
+        while (_start < target)
+        {
+            token.ThrowIfCancellationRequested();
+            var window = _audio.Read(_start, true, (int)Math.Min(8000, target - _start));
+            _localText = await _localStream.ProcessAsync(window.Samples, false, token);
+            _start = window.End;
+            await PublishLocalAsync(token);
+        }
+        if (stopped && !_localFinished)
+        {
+            _localText = await _localStream.ProcessAsync([], true, token);
+            _localFinished = true;
+        }
+        await PublishLocalAsync(token);
+        if (stopped) _finalText = _localText;
+    }
+    private async Task PublishLocalAsync(CancellationToken token)
+    {
+        if (_localText == _localPublished) return;
+        var delta = StreamTextReconciliation.AppendOnlyTail(_localPublished, _localText);
+        await _publish(delta, _localText, token);
+        _localPublished = _localText;
     }
 
     private async Task<string> TranscribeCompleteAudioAsync(CancellationToken token)
@@ -154,6 +197,7 @@ public sealed class StreamingDictationSession : IDisposable
 
     public void Dispose()
     {
+        _localStream?.Dispose();
         _audio.Dispose();
         _gate.Dispose();
     }

@@ -11,25 +11,12 @@ namespace Wyspa.App.ViewModels;
 
 public sealed class MainViewModel : ViewModelBase
 {
-    private static readonly WakeTrainingPrompt[] WakeTrainingPrompts =
-    [
-        new("Hey Whisper.", WakeTrainingPromptKind.WakePhrase, 2800),
-        new("Hey Whisper, start listening.", WakeTrainingPromptKind.WakePhrase, 3400),
-        new("Hey Whisper, take a quick note.", WakeTrainingPromptKind.WakePhrase, 3600),
-        new("My voice should be recognized clearly, even when I speak at a normal pace.", WakeTrainingPromptKind.VoiceModel, 6200),
-        new("Wyspa listens for my wake phrase before it starts transcribing my words.", WakeTrainingPromptKind.VoiceModel, 6200),
-        new("Today I want short messages, longer notes, and commands to sound natural.", WakeTrainingPromptKind.VoiceModel, 6200),
-        new("The quick brown fox jumps over the lazy dog while I speak calmly.", WakeTrainingPromptKind.VoiceModel, 6200),
-        new("Hey Whisper.", WakeTrainingPromptKind.WakePhrase, 2800)
-    ];
-
     private readonly ISettingsService _settingsService;
     private readonly ISecretStore _secretStore;
     private readonly IGroqTranscriptionClient _groqClient;
     private readonly IAudioCaptureService _audioCapture;
     private readonly IAudioLevelMonitorService _levelMonitor;
     private readonly IHotkeyService _hotkeyService;
-    private readonly IHotkeyService _autoCaptureHotkeyService;
     private readonly IStartupService _startupService;
     private readonly DictationOrchestrator _orchestrator;
     private readonly GitHubUpdateService _updateService;
@@ -37,28 +24,23 @@ public sealed class MainViewModel : ViewModelBase
     private string _apiKey = string.Empty;
     private string _connectionMessage = "Add a Groq API key to enable transcription.";
     private string _hotkeyText = HotkeySettings.Default.DisplayText;
-    private string _autoCaptureHotkeyText = HotkeySettings.DefaultAutoCapture.DisplayText;
     private string _scratchpadText = string.Empty;
     private string _scratchpadStatus = "Record a short clip to test Groq transcription without inserting text.";
-    private string _wakeVoiceStatus = "Record yourself saying hey whisper to gate SmartListen locally.";
-    private readonly WakeVoiceMatcher _wakeVoiceMatcher = new();
-    private readonly List<float> _wakeVoiceSamples = [];
-    private CancellationTokenSource? _wakeVoiceRecordingCts;
-    private int _wakeTrainingPromptIndex;
-    private bool _wakeVoiceStartedLevelMonitor;
     private bool _hasApiKey;
     private bool _isScratchpadRecording;
     private bool _isWakeVoiceRecording;
     private bool _startWithWindows;
     private bool _isCheckingForUpdates;
     private bool _isUpdateAvailable;
-    private bool _lastMediaListeningState;
-    private AutoCaptureMediaBehavior _lastMediaBehavior = AutoCaptureMediaBehavior.None;
+    private readonly SemaphoreSlim _hotkeyGate = new(1, 1);
+    private readonly SemaphoreSlim _mediaGate = new(1, 1);
+    private bool _hotkeyMediaActive, _holdHotkeySession;
     private string _updateStatus = "Updates have not been checked.";
     private string? _updateUrl;
     private float _microphoneLevel;
     private bool _isInputLevelPreviewVisible;
     private string _inputLevelPreviewError = string.Empty;
+    private (bool Local, bool Ready)? _providerStatus;
     private DictationState _status = DictationState.Idle;
 
     public MainViewModel(
@@ -68,7 +50,6 @@ public sealed class MainViewModel : ViewModelBase
         IAudioCaptureService audioCapture,
         IAudioLevelMonitorService levelMonitor,
         IHotkeyService hotkeyService,
-        IHotkeyService autoCaptureHotkeyService,
         IStartupService startupService,
         DictationOrchestrator orchestrator,
         GitHubUpdateService updateService,
@@ -80,7 +61,6 @@ public sealed class MainViewModel : ViewModelBase
         _audioCapture = audioCapture;
         _levelMonitor = levelMonitor;
         _hotkeyService = hotkeyService;
-        _autoCaptureHotkeyService = autoCaptureHotkeyService;
         _startupService = startupService;
         _orchestrator = orchestrator;
         _updateService = updateService;
@@ -89,21 +69,19 @@ public sealed class MainViewModel : ViewModelBase
         Models = new GroqModelsViewModel(groqClient, () => Settings);
         Devices = [];
         SaveCommand = new AsyncRelayCommand(SaveHotkeyAsync);
-        SaveAutoCaptureHotkeyCommand = new AsyncRelayCommand(SaveAutoCaptureHotkeyAsync);
         TestConnectionCommand = new AsyncRelayCommand(TestConnectionAsync);
         RefreshModelsCommand = new AsyncRelayCommand(RefreshModelsAsync);
         ToggleListeningCommand = new AsyncRelayCommand(ToggleListeningAsync);
         RemoveKeyCommand = new AsyncRelayCommand(RemoveKeyAsync);
         RefreshDevicesCommand = new AsyncRelayCommand(LoadDevicesAsync);
         ScratchpadCommand = new AsyncRelayCommand(ToggleScratchpadAsync);
-        RecordWakeVoiceCommand = new AsyncRelayCommand(ToggleWakeVoiceRecordingAsync);
-        ResetWakeVoiceCommand = new AsyncRelayCommand(ResetWakeVoiceTrainingAsync);
         CheckForUpdatesCommand = new AsyncRelayCommand(CheckForUpdatesAsync);
         OpenUpdateCommand = new RelayCommand(_ => OpenUpdate(), _ => IsUpdateAvailable && !string.IsNullOrWhiteSpace(UpdateUrl));
-        _orchestrator.StateChanged += (_, state) => RunOnUi(() => Status = state);
+        _orchestrator.StateChanged += (_, state) => RunOnUi(() => { Status = state; if (state is DictationState.Error) _ = EndHotkeyMediaAsync(); });
+        _orchestrator.CaptureStopped += (_, _) => { _holdHotkeySession = false; _ = EndHotkeyMediaAsync(); };
         _audioCapture.LevelAvailable += (_, level) => UpdateMicrophoneLevel(level);
         _levelMonitor.LevelAvailable += (_, level) => UpdateMicrophoneLevel(level);
-        _levelMonitor.AudioAvailable += OnWakeVoiceAudioAvailable;
+        // Wake phrase calibration owns the level-monitor subscription while active.
     }
 
     public event EventHandler? SettingsSaved;
@@ -153,17 +131,14 @@ public sealed class MainViewModel : ViewModelBase
     public async Task SetNoteCaptureActiveAsync(bool active)
     {
         NoteCaptureActive = active;
-        await ApplyAutoCaptureMediaBehaviorAsync(IsAutoCaptureListening, force: true);
+        await Task.CompletedTask;
     }
     public ObservableCollection<AudioDeviceInfo> Devices { get; }
     public ICommand SaveCommand { get; }
-    public ICommand SaveAutoCaptureHotkeyCommand { get; }
     public ICommand TestConnectionCommand { get; }
     public ICommand RefreshModelsCommand { get; }
     public ICommand ToggleListeningCommand { get; }
     public ICommand ScratchpadCommand { get; }
-    public ICommand RecordWakeVoiceCommand { get; }
-    public ICommand ResetWakeVoiceCommand { get; }
     public ICommand CheckForUpdatesCommand { get; }
     public ICommand OpenUpdateCommand { get; }
     public ICommand RemoveKeyCommand { get; }
@@ -194,16 +169,11 @@ public sealed class MainViewModel : ViewModelBase
         set => SetProperty(ref _connectionMessage, value);
     }
 
+    public string HotkeyTitle => Settings.ActivationMode switch { ActivationMode.Toggle => "Toggle Wyspa", ActivationMode.HoldToTalk => "Hold Hotkey", _ => "SmartListening On/Off" };
     public string HotkeyText
     {
         get => _hotkeyText;
         set => SetProperty(ref _hotkeyText, value);
-    }
-
-    public string AutoCaptureHotkeyText
-    {
-        get => _autoCaptureHotkeyText;
-        set => SetProperty(ref _autoCaptureHotkeyText, value);
     }
 
     public string ScratchpadText
@@ -218,12 +188,6 @@ public sealed class MainViewModel : ViewModelBase
         set => SetProperty(ref _scratchpadStatus, value);
     }
 
-    public string WakeVoiceStatus
-    {
-        get => _wakeVoiceStatus;
-        set => SetProperty(ref _wakeVoiceStatus, value);
-    }
-
     public bool IsScratchpadRecording
     {
         get => _isScratchpadRecording;
@@ -236,6 +200,8 @@ public sealed class MainViewModel : ViewModelBase
         }
     }
 
+    public WakeCalibrationViewModel? WakeCalibration { get; set; }
+    public void SetWakeCalibrationState(bool active) => IsWakeVoiceRecording = active;
     public bool IsWakeVoiceRecording
     {
         get => _isWakeVoiceRecording;
@@ -243,7 +209,6 @@ public sealed class MainViewModel : ViewModelBase
         {
             if (SetProperty(ref _isWakeVoiceRecording, value))
             {
-                OnPropertyChanged(nameof(WakeVoiceButtonText));
             }
         }
     }
@@ -325,19 +290,15 @@ public sealed class MainViewModel : ViewModelBase
     public string StatusText => Status.ToString();
     public string ToggleText => Status is DictationState.Listening ? "Stop Listening" : "Start Listening";
     public string ScratchpadButtonText => IsScratchpadRecording ? "Stop test recording" : "Start test recording";
-    public string WakeVoiceButtonText => IsWakeVoiceRecording ? "Recording..." : "Record training sample";
-    public string WakeTrainingText => Settings.AutoCaptureWakeVoiceProfile?.TrainingSampleCount is > 0
-        ? $"{Settings.AutoCaptureWakeVoiceProfile.TrainingSampleCount} wake sample(s), {Settings.AutoCaptureWakeVoiceProfile.VoiceTrainingSampleCount} voice sample(s)"
-        : "No local wake training yet";
-    public string WakeTrainingProgressText => $"Prompt {_wakeTrainingPromptIndex + 1} of {WakeTrainingPrompts.Length}";
-    public string WakeTrainingPromptText => WakeTrainingPrompts[_wakeTrainingPromptIndex].Text;
     public string WakeToneText => string.IsNullOrWhiteSpace(Settings.WakeTonePath) ? "Default tone" : Settings.WakeTonePath;
     public string MicrophoneLevelText => $"Live input {MicrophoneLevel:P0}";
     public string AppVersionText => $"Current Version {GetCurrentVersionText()}";
-    public bool CanListen => HasApiKey && !NoteCaptureActive;
+    public LocalModelsViewModel? LocalModels { get; set; }
+    public bool CanTranscribe => Settings.UseLocalTranscription ? LocalModels?.Installed == true : HasApiKey;
+    public bool CanListen => CanTranscribe && !NoteCaptureActive;
     public bool IsAutoCaptureMode => Settings.ActivationMode is ActivationMode.AutoCapture;
-    public bool IsAutoCaptureListening => HasApiKey && !NoteCaptureActive && IsAutoCaptureMode && Settings.AutoCaptureListeningEnabled;
-    public bool IsWakeVoiceSettingsEnabled => Settings.AutoCaptureWakeVoiceEnabled;
+    public bool IsAutoCaptureListening => CanTranscribe && !NoteCaptureActive && IsAutoCaptureMode && Settings.AutoCaptureListeningEnabled;
+    public bool IsWakeVoiceSettingsEnabled => IsAutoCaptureMode && Settings.AutoCaptureWakeVoiceEnabled;
     public bool IsWritingCleanupSettingsEnabled => Settings.GroqWritingCleanupEnabled;
     public bool IsIntentSettingsEnabled => Settings.IntentActionsEnabled;
 
@@ -351,20 +312,19 @@ public sealed class MainViewModel : ViewModelBase
         Settings = await _settingsService.LoadAsync(CancellationToken.None);
         StartWithWindows = _startupService.IsEnabled();
         HotkeyText = Settings.Hotkey.DisplayText;
-        AutoCaptureHotkeyText = Settings.AutoCaptureHotkey.DisplayText;
         HasApiKey = !string.IsNullOrWhiteSpace(await _secretStore.GetApiKeyAsync(CancellationToken.None));
         if (HasApiKey)
         {
             ConnectionMessage = "Groq key is saved locally with Windows user protection.";
         }
 
-        _lastMediaListeningState = IsAutoCaptureListening;
-        _lastMediaBehavior = Settings.AutoCaptureMediaBehavior;
+        if (Settings.UseLocalTranscription) ConnectionMessage = CanTranscribe ? "Local transcription · audio stays on this computer." : "Download a local model in Settings to begin.";
 
         await LoadDevicesAsync();
         RegisterHotkeys();
         OnPropertyChanged(nameof(Settings));
         OnPropertyChanged(nameof(IsAutoCaptureMode));
+        OnPropertyChanged(nameof(HotkeyTitle));
         OnPropertyChanged(nameof(IsAutoCaptureListening));
         OnPropertyChanged(nameof(IsWakeVoiceSettingsEnabled));
         OnPropertyChanged(nameof(IsWritingCleanupSettingsEnabled));
@@ -384,40 +344,67 @@ public sealed class MainViewModel : ViewModelBase
 
     public async Task HandleHotkeyPressedAsync()
     {
-        if (NoteCaptureActive) return;
-        if (!await EnsureApiKeyAvailableAsync())
+        await _hotkeyGate.WaitAsync();
+        try
         {
-            return;
+            if (NoteCaptureActive || IsWakeVoiceRecording || IsScratchpadRecording || !await EnsureApiKeyAvailableAsync()) return;
+            if (Settings.ActivationMode == ActivationMode.AutoCapture)
+            {
+                if (!Settings.AutoCaptureListeningEnabled) await BeginHotkeyMediaAsync();
+                await ToggleAutoCaptureListeningAsync();
+                if (!IsAutoCaptureListening) await EndHotkeyMediaAsync();
+            }
+            else if (_audioCapture.IsRecording)
+            {
+                if (Settings.ActivationMode != ActivationMode.HoldToTalk) await _orchestrator.StopListeningAndTranscribeAsync();
+            }
+            else
+            {
+                _holdHotkeySession = Settings.ActivationMode == ActivationMode.HoldToTalk;
+                await BeginHotkeyMediaAsync(); await _orchestrator.StartListeningAsync();
+                if (!_audioCapture.IsRecording) { _holdHotkeySession = false; await EndHotkeyMediaAsync(); }
+            }
         }
-
-        if (Settings.ActivationMode is ActivationMode.AutoCapture)
-        {
-            await ToggleAutoCaptureListeningAsync();
-            return;
-        }
-
-        if (Settings.ActivationMode is ActivationMode.HoldToTalk)
-        {
-            await _orchestrator.StartListeningAsync();
-        }
-        else
-        {
-            await _orchestrator.ToggleAsync();
-        }
+        catch { _holdHotkeySession = false; await EndHotkeyMediaAsync(); throw; }
+        finally { _hotkeyGate.Release(); }
     }
 
     public async Task HandleHotkeyReleasedAsync()
     {
-        if (NoteCaptureActive) return;
-        if (!await EnsureApiKeyAvailableAsync())
+        await _hotkeyGate.WaitAsync();
+        try
         {
-            return;
-        }
-
-        if (Settings.ActivationMode is ActivationMode.HoldToTalk)
-        {
+            if (!_holdHotkeySession) return;
+            _holdHotkeySession = false;
             await _orchestrator.StopListeningAndTranscribeAsync();
+            await EndHotkeyMediaAsync();
         }
+        finally { _hotkeyGate.Release(); }
+    }
+
+    private async Task BeginHotkeyMediaAsync()
+    {
+        await _mediaGate.WaitAsync();
+        try
+        {
+            if (_hotkeyMediaActive || Settings.AutoCaptureMediaBehavior == AutoCaptureMediaBehavior.None) return;
+            await _mediaControlService.SetListeningStateAsync(Settings.AutoCaptureMediaBehavior, true, CancellationToken.None);
+            _hotkeyMediaActive = true;
+        }
+        catch (Exception ex) { CrashLogService.Log(ex); }
+        finally { _mediaGate.Release(); }
+    }
+    private async Task EndHotkeyMediaAsync()
+    {
+        await _mediaGate.WaitAsync();
+        try
+        {
+            if (!_hotkeyMediaActive) return;
+            _hotkeyMediaActive = false;
+            await _mediaControlService.RestoreAsync(CancellationToken.None);
+        }
+        catch (Exception ex) { CrashLogService.Log(ex); }
+        finally { _mediaGate.Release(); }
     }
 
     public async Task ToggleAutoCaptureListeningAsync()
@@ -426,45 +413,24 @@ public sealed class MainViewModel : ViewModelBase
         if (!await EnsureApiKeyAvailableAsync())
         {
             Settings.AutoCaptureListeningEnabled = false;
-            await ApplyAutoCaptureMediaBehaviorAsync(isListening: false, force: true);
             await AutoSaveSettingsAsync("Add a Groq API key before enabling SmartListen listening.");
             return;
         }
 
         Settings.AutoCaptureListeningEnabled = !Settings.AutoCaptureListeningEnabled;
-        var isListening = IsAutoCaptureListening;
-        if (isListening)
-        {
-            await ApplyAutoCaptureMediaBehaviorAsync(isListening: true, force: true);
-        }
-
         await SaveSettingsCoreAsync(registerHotkey: false, updateMessage: false);
-        if (!isListening)
-        {
-            await ApplyAutoCaptureMediaBehaviorAsync(isListening: false, force: true);
-        }
-
         ConnectionMessage = Settings.AutoCaptureListeningEnabled
             ? "SmartListen listening is on."
             : "SmartListen listening is off.";
         AutoCaptureToggleFeedbackRequested?.Invoke(this, Settings.AutoCaptureListeningEnabled);
         OnPropertyChanged(nameof(Settings));
         OnPropertyChanged(nameof(IsAutoCaptureMode));
+        OnPropertyChanged(nameof(HotkeyTitle));
         OnPropertyChanged(nameof(IsAutoCaptureListening));
         SettingsChanged?.Invoke(this, EventArgs.Empty);
+        RefreshTranscriptionState();
         SettingsSaved?.Invoke(this, EventArgs.Empty);
         AutoCaptureListeningChanged?.Invoke(this, EventArgs.Empty);
-    }
-
-    public async Task HandleAutoCaptureHotkeyPressedAsync()
-    {
-        if (Settings.ActivationMode is not ActivationMode.AutoCapture)
-        {
-            ConnectionMessage = "Switch Input mode to SmartListen before using the SmartListen hotkey.";
-            return;
-        }
-
-        await ToggleAutoCaptureListeningAsync();
     }
 
     public async Task SetStartWithWindowsAsync(bool enabled)
@@ -477,6 +443,7 @@ public sealed class MainViewModel : ViewModelBase
         ConnectionMessage = enabled ? "Start with Windows is on." : "Start with Windows is off.";
         OnPropertyChanged(nameof(Settings));
         SettingsChanged?.Invoke(this, EventArgs.Empty);
+        RefreshTranscriptionState();
         SettingsSaved?.Invoke(this, EventArgs.Empty);
         StartupSettingChanged?.Invoke(this, EventArgs.Empty);
     }
@@ -504,7 +471,7 @@ public sealed class MainViewModel : ViewModelBase
         }
 
         var apiKey = await _secretStore.GetApiKeyAsync(CancellationToken.None);
-        if (string.IsNullOrWhiteSpace(apiKey))
+        if (!Settings.UseLocalTranscription && string.IsNullOrWhiteSpace(apiKey))
         {
             ScratchpadStatus = "Add and test your Groq API key first.";
             return;
@@ -534,16 +501,16 @@ public sealed class MainViewModel : ViewModelBase
 
             var settings = await _settingsService.LoadAsync(CancellationToken.None);
             var apiKey = await _secretStore.GetApiKeyAsync(CancellationToken.None);
-            if (string.IsNullOrWhiteSpace(apiKey))
+            if (!Settings.UseLocalTranscription && string.IsNullOrWhiteSpace(apiKey))
             {
                 ScratchpadStatus = "Add and test your Groq API key first.";
                 return;
             }
 
             var transcript = await _groqClient.TranscribeAsync(
-                apiKey,
+                apiKey ?? "",
                 recording.FilePath,
-                new TranscriptionOptions(settings.ModelId, settings.Language, settings.CustomPrompt),
+                new TranscriptionOptions(settings.ModelId, settings.Language, settings.CustomPrompt, UseLocal: settings.UseLocalTranscription, LocalModelId: settings.LocalModelId),
                 CancellationToken.None);
 
             var cleaned = settings.CleanupEnabled
@@ -561,7 +528,7 @@ public sealed class MainViewModel : ViewModelBase
             {
                 ScratchpadStatus = "Polishing scratchpad text...";
                 cleaned = await _groqClient.CleanupTranscriptAsync(
-                    apiKey,
+                    apiKey ?? "",
                     cleaned,
                     settings.WritingCleanupModelId,
                     settings.WritingCleanupTone,
@@ -606,147 +573,6 @@ public sealed class MainViewModel : ViewModelBase
         }
     }
 
-    private async Task ToggleWakeVoiceRecordingAsync()
-    {
-        if (NoteCaptureActive) { WakeVoiceStatus = "Stop the notetaker session before training your wake voice."; return; }
-        if (IsWakeVoiceRecording)
-        {
-            await StopWakeVoiceRecordingAsync(saveProfile: true);
-            return;
-        }
-
-        await StartWakeVoiceRecordingAsync();
-    }
-
-    private async Task StartWakeVoiceRecordingAsync()
-    {
-        if (_orchestrator.HasPendingStreamOutput) { WakeVoiceStatus = "Wait for the current dictation to finish processing."; return; }
-        if (_audioCapture.IsRecording)
-        {
-            WakeVoiceStatus = "Stop the current dictation before recording a wake phrase.";
-            return;
-        }
-
-        lock (_wakeVoiceSamples)
-        {
-            _wakeVoiceSamples.Clear();
-        }
-
-        try
-        {
-            _wakeVoiceRecordingCts?.Cancel();
-            _wakeVoiceRecordingCts = new CancellationTokenSource();
-            _wakeVoiceStartedLevelMonitor = false;
-            if (!_levelMonitor.IsRunning)
-            {
-                await _levelMonitor.StartAsync(Settings.MicrophoneDeviceId, CancellationToken.None);
-                _wakeVoiceStartedLevelMonitor = true;
-            }
-
-            IsWakeVoiceRecording = true;
-            WakeVoiceStatus = WakeTrainingPrompts[_wakeTrainingPromptIndex].Kind is WakeTrainingPromptKind.WakePhrase
-                ? "Say the wake phrase, then pause."
-                : "Read the training sentence in your normal voice.";
-            _ = AutoStopWakeVoiceRecordingAsync(_wakeVoiceRecordingCts.Token);
-        }
-        catch (Exception ex)
-        {
-            StopWakeVoiceLevelMonitorIfStarted();
-            IsWakeVoiceRecording = false;
-            WakeVoiceStatus = ex.Message;
-        }
-    }
-
-    private async Task AutoStopWakeVoiceRecordingAsync(CancellationToken cancellationToken)
-    {
-        try
-        {
-            await Task.Delay(WakeTrainingPrompts[_wakeTrainingPromptIndex].DurationMs, cancellationToken);
-            if (!cancellationToken.IsCancellationRequested)
-            {
-                await StopWakeVoiceRecordingAsync(saveProfile: true);
-            }
-        }
-        catch (OperationCanceledException)
-        {
-        }
-    }
-
-    private async Task StopWakeVoiceRecordingAsync(bool saveProfile)
-    {
-        _wakeVoiceRecordingCts?.Cancel();
-        if (!IsWakeVoiceRecording)
-        {
-            return;
-        }
-
-        IsWakeVoiceRecording = false;
-        if (!saveProfile)
-        {
-            StopWakeVoiceLevelMonitorIfStarted();
-            return;
-        }
-
-        float[] samples;
-        lock (_wakeVoiceSamples)
-        {
-            samples = [.. _wakeVoiceSamples];
-            _wakeVoiceSamples.Clear();
-        }
-
-        try
-        {
-            var prompt = WakeTrainingPrompts[_wakeTrainingPromptIndex];
-            Settings.AutoCaptureWakeVoiceProfile = prompt.Kind is WakeTrainingPromptKind.WakePhrase
-                ? _wakeVoiceMatcher.AddTrainingSample(Settings.AutoCaptureWakeVoiceProfile, samples)
-                : _wakeVoiceMatcher.AddVoiceTrainingSample(Settings.AutoCaptureWakeVoiceProfile, samples);
-            Settings.AutoCaptureWakeVoiceEnabled = true;
-            await SaveSettingsCoreAsync(registerHotkey: false, updateMessage: false);
-            AdvanceWakeTrainingPrompt();
-            WakeVoiceStatus = $"Training saved locally. Next: {WakeTrainingPromptText}";
-            ConnectionMessage = "Wake training updated. SmartListen now waits for the local match.";
-            OnPropertyChanged(nameof(Settings));
-            OnPropertyChanged(nameof(WakeTrainingText));
-        }
-        catch (Exception ex)
-        {
-            WakeVoiceStatus = ex.Message;
-        }
-        finally
-        {
-            StopWakeVoiceLevelMonitorIfStarted();
-        }
-    }
-
-    private void StopWakeVoiceLevelMonitorIfStarted()
-    {
-        if (!_wakeVoiceStartedLevelMonitor)
-        {
-            return;
-        }
-
-        if (!_isInputLevelPreviewVisible) _levelMonitor.Stop();
-        _wakeVoiceStartedLevelMonitor = false;
-    }
-
-    private void OnWakeVoiceAudioAvailable(object? sender, IReadOnlyList<float> samples)
-    {
-        if (!IsWakeVoiceRecording)
-        {
-            return;
-        }
-
-        lock (_wakeVoiceSamples)
-        {
-            _wakeVoiceSamples.AddRange(samples);
-            var maxSampleCount = WakeVoiceMatcher.SampleRate * 4;
-            if (_wakeVoiceSamples.Count > maxSampleCount)
-            {
-                _wakeVoiceSamples.RemoveRange(0, _wakeVoiceSamples.Count - maxSampleCount);
-            }
-        }
-    }
-
     public async Task SetWakeTonePathAsync(string? path)
     {
         Settings.WakeTonePath = string.IsNullOrWhiteSpace(path) ? null : path;
@@ -755,26 +581,12 @@ public sealed class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(WakeToneText));
     }
 
-    private async Task ResetWakeVoiceTrainingAsync()
+    public async Task SuspendHotkeyEditingAsync()
     {
-        Settings.AutoCaptureWakeVoiceProfile = null;
-        Settings.AutoCaptureWakeVoiceEnabled = false;
-        _wakeTrainingPromptIndex = 0;
-        await SaveSettingsCoreAsync(registerHotkey: false, updateMessage: false);
-        WakeVoiceStatus = "Wake voice training cleared.";
-        ConnectionMessage = "Wake voice training cleared.";
-        OnPropertyChanged(nameof(Settings));
-        OnPropertyChanged(nameof(WakeTrainingText));
-        OnPropertyChanged(nameof(WakeTrainingProgressText));
-        OnPropertyChanged(nameof(WakeTrainingPromptText));
+        _hotkeyService.Unregister();
+        if (_holdHotkeySession) { _holdHotkeySession = false; await _orchestrator.StopIfNeededAsync(); await EndHotkeyMediaAsync(); }
     }
-
-    private void AdvanceWakeTrainingPrompt()
-    {
-        _wakeTrainingPromptIndex = (_wakeTrainingPromptIndex + 1) % WakeTrainingPrompts.Length;
-        OnPropertyChanged(nameof(WakeTrainingProgressText));
-        OnPropertyChanged(nameof(WakeTrainingPromptText));
-    }
+    public void ResumeHotkeyEditing() => RegisterDictationHotkey();
 
     public async Task AutoSaveSettingsAsync(string? message = null)
     {
@@ -793,12 +605,6 @@ public sealed class MainViewModel : ViewModelBase
             return;
         }
 
-        if (HotkeysMatch(parsedHotkey, Settings.AutoCaptureHotkey))
-        {
-            ConnectionMessage = "Choose a different shortcut for dictation and SmartListen listening.";
-            return;
-        }
-
         var previousHotkey = Settings.Hotkey;
         Settings.Hotkey = parsedHotkey;
         HotkeyText = parsedHotkey.DisplayText;
@@ -814,73 +620,21 @@ public sealed class MainViewModel : ViewModelBase
         ConnectionMessage = "Hotkey saved.";
     }
 
-    public async Task SaveAutoCaptureHotkeyAsync()
-    {
-        if (!HotkeyValidator.TryParse(AutoCaptureHotkeyText, out var parsedHotkey, out var hotkeyError))
-        {
-            ConnectionMessage = hotkeyError ?? "Could not read SmartListen hotkey.";
-            return;
-        }
-
-        if (HotkeysMatch(parsedHotkey, Settings.Hotkey))
-        {
-            ConnectionMessage = "Choose a different shortcut for dictation and SmartListen listening.";
-            return;
-        }
-
-        var previousHotkey = Settings.AutoCaptureHotkey;
-        Settings.AutoCaptureHotkey = parsedHotkey;
-        AutoCaptureHotkeyText = parsedHotkey.DisplayText;
-        if (!RegisterAutoCaptureHotkey())
-        {
-            Settings.AutoCaptureHotkey = previousHotkey;
-            AutoCaptureHotkeyText = previousHotkey.DisplayText;
-            RegisterAutoCaptureHotkey();
-            return;
-        }
-
-        await SaveSettingsCoreAsync(registerHotkey: false, updateMessage: false);
-        ConnectionMessage = "SmartListen hotkey saved.";
-    }
-
     public void ApplyLiveSettings()
     {
         ClampSettings();
-        _ = ApplyAutoCaptureMediaBehaviorAsync(IsAutoCaptureListening, force: false);
+        WakeCalibration?.RefreshState();
         OnPropertyChanged(nameof(IsAutoCaptureMode));
+        OnPropertyChanged(nameof(HotkeyTitle));
         OnPropertyChanged(nameof(IsAutoCaptureListening));
         OnPropertyChanged(nameof(CanListen));
         OnPropertyChanged(nameof(WakeToneText));
-        OnPropertyChanged(nameof(WakeTrainingText));
-        OnPropertyChanged(nameof(WakeTrainingProgressText));
-        OnPropertyChanged(nameof(WakeTrainingPromptText));
         OnPropertyChanged(nameof(IsWakeVoiceSettingsEnabled));
         OnPropertyChanged(nameof(IsWritingCleanupSettingsEnabled));
         OnPropertyChanged(nameof(IsIntentSettingsEnabled));
         OnPropertyChanged(nameof(Settings));
         SettingsChanged?.Invoke(this, EventArgs.Empty);
         AutoCaptureListeningChanged?.Invoke(this, EventArgs.Empty);
-    }
-
-    private async Task ApplyAutoCaptureMediaBehaviorAsync(bool isListening, bool force)
-    {
-        if (!force &&
-            isListening == _lastMediaListeningState &&
-            Settings.AutoCaptureMediaBehavior == _lastMediaBehavior)
-        {
-            return;
-        }
-
-        try
-        {
-            await _mediaControlService.SetListeningStateAsync(Settings.AutoCaptureMediaBehavior, isListening, CancellationToken.None);
-            _lastMediaListeningState = isListening;
-            _lastMediaBehavior = Settings.AutoCaptureMediaBehavior;
-        }
-        catch (Exception ex)
-        {
-            CrashLogService.Log(ex);
-        }
     }
 
     private async Task SaveSettingsCoreAsync(bool registerHotkey, bool updateMessage)
@@ -902,17 +656,16 @@ public sealed class MainViewModel : ViewModelBase
         }
 
         OnPropertyChanged(nameof(IsAutoCaptureMode));
+        OnPropertyChanged(nameof(HotkeyTitle));
         OnPropertyChanged(nameof(IsAutoCaptureListening));
         OnPropertyChanged(nameof(CanListen));
         OnPropertyChanged(nameof(WakeToneText));
-        OnPropertyChanged(nameof(WakeTrainingText));
-        OnPropertyChanged(nameof(WakeTrainingProgressText));
-        OnPropertyChanged(nameof(WakeTrainingPromptText));
         OnPropertyChanged(nameof(IsWakeVoiceSettingsEnabled));
         OnPropertyChanged(nameof(IsWritingCleanupSettingsEnabled));
         OnPropertyChanged(nameof(IsIntentSettingsEnabled));
         OnPropertyChanged(nameof(Settings));
         SettingsChanged?.Invoke(this, EventArgs.Empty);
+        RefreshTranscriptionState();
         SettingsSaved?.Invoke(this, EventArgs.Empty);
         AutoCaptureListeningChanged?.Invoke(this, EventArgs.Empty);
     }
@@ -1001,6 +754,7 @@ public sealed class MainViewModel : ViewModelBase
             Settings.FirstRunComplete = true;
             await _settingsService.SaveAsync(Settings, CancellationToken.None);
             SettingsChanged?.Invoke(this, EventArgs.Empty);
+            RefreshTranscriptionState();
             SettingsSaved?.Invoke(this, EventArgs.Empty);
         }
     }
@@ -1020,12 +774,13 @@ public sealed class MainViewModel : ViewModelBase
         ApiKey = string.Empty;
         Models.Clear();
         Settings.AutoCaptureListeningEnabled = false;
-        await ApplyAutoCaptureMediaBehaviorAsync(isListening: false, force: true);
+        await EndHotkeyMediaAsync();
         await _settingsService.SaveAsync(Settings, CancellationToken.None);
         ConnectionMessage = "Groq API key removed from this Windows user profile.";
         OnPropertyChanged(nameof(Settings));
         OnPropertyChanged(nameof(IsAutoCaptureListening));
         SettingsChanged?.Invoke(this, EventArgs.Empty);
+        RefreshTranscriptionState();
         SettingsSaved?.Invoke(this, EventArgs.Empty);
         AutoCaptureListeningChanged?.Invoke(this, EventArgs.Empty);
     }
@@ -1033,7 +788,6 @@ public sealed class MainViewModel : ViewModelBase
     private void RegisterHotkeys()
     {
         RegisterDictationHotkey();
-        RegisterAutoCaptureHotkey();
     }
 
     private bool RegisterDictationHotkey()
@@ -1045,32 +799,6 @@ public sealed class MainViewModel : ViewModelBase
         }
 
         return true;
-    }
-
-    private bool RegisterAutoCaptureHotkey()
-    {
-        if (!_autoCaptureHotkeyService.TryRegister(Settings.AutoCaptureHotkey, out var error))
-        {
-            ConnectionMessage = error ?? "Could not register SmartListen hotkey.";
-            return false;
-        }
-
-        return true;
-    }
-
-    private static bool HotkeysMatch(HotkeySettings left, HotkeySettings right) =>
-        left.Modifiers == right.Modifiers &&
-        string.Equals(
-            HotkeyValidator.NormalizeKey(left.Key),
-            HotkeyValidator.NormalizeKey(right.Key),
-            StringComparison.OrdinalIgnoreCase);
-
-    private sealed record WakeTrainingPrompt(string Text, WakeTrainingPromptKind Kind, int DurationMs);
-
-    private enum WakeTrainingPromptKind
-    {
-        WakePhrase,
-        VoiceModel
     }
 
     private static void RunOnUi(Action action)
@@ -1087,6 +815,12 @@ public sealed class MainViewModel : ViewModelBase
 
     private async Task<bool> EnsureApiKeyAvailableAsync()
     {
+        if (Settings.UseLocalTranscription)
+        {
+            if (LocalModels?.Installed == true) return true;
+            ConnectionMessage = "Install a local model in Settings before listening.";
+            return false;
+        }
         var hasKey = !string.IsNullOrWhiteSpace(await _secretStore.GetApiKeyAsync(CancellationToken.None));
         HasApiKey = hasKey;
         if (!hasKey)
@@ -1108,4 +842,16 @@ public sealed class MainViewModel : ViewModelBase
         var version = GetCurrentVersion();
         return $"{version.Major}.{version.Minor}.{version.Build}";
     }
+    private void RefreshTranscriptionState()
+    {
+        var state = (Local: Settings.UseLocalTranscription, Ready: CanTranscribe);
+        if (_providerStatus != state)
+        {
+            _providerStatus = state;
+            ConnectionMessage = state.Local ? state.Ready ? "Local transcription · audio stays on this computer." : "Install a local model in Settings to begin." : HasApiKey ? "Groq is connected." : "Add a Groq API key to enable transcription.";
+        }
+        OnPropertyChanged(nameof(CanTranscribe)); OnPropertyChanged(nameof(CanListen)); OnPropertyChanged(nameof(IsAutoCaptureListening));
+        WakeCalibration?.RefreshState();
+    }
+
 }

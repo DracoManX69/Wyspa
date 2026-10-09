@@ -15,7 +15,7 @@ public interface IConversationCapture : IAsyncDisposable
 
 public interface ISpeakerIdentifier : IDisposable
 {
-    Task InitializeAsync(CancellationToken token);
+    Task InitializeAsync(CancellationToken token, IProgress<string>? progress = null);
     Task<IReadOnlyList<SpeakerTurn>> IdentifyAsync(float[] samples, CancellationToken token);
     void Reset();
 }

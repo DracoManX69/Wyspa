@@ -58,6 +58,23 @@ public sealed class FileTranscriptionViewModelTests
         Assert.False(vm.IsBusy);
     }
 
+    [Fact]
+    public async Task LocalMode_NeedsNoKeyOrCloudPreparation_AndKeepsOriginal()
+    {
+        var path = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllBytes(path, [1, 2, 3]);
+            var prep = new FakePreparation(); var client = new FakeClient();
+            var vm = new FileTranscriptionViewModel(prep, client, new FakeSecrets(null), () => new AppSettings { UseLocalTranscription = true, LocalModelId = "tiny.en" });
+            vm.AddFiles([path]); await vm.StartAsync();
+            Assert.True(vm.Files[0].IsComplete); Assert.Empty(prep.Directories);
+            Assert.True(client.Options!.UseLocal); Assert.Equal("tiny.en", client.Options.LocalModelId);
+            Assert.Equal(new byte[] { 1, 2, 3 }, File.ReadAllBytes(path));
+        }
+        finally { File.Delete(path); }
+    }
+
     private sealed class FakePreparation : IAudioFilePreparationService
     {
         public List<string> Directories { get; } = [];

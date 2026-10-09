@@ -22,10 +22,11 @@ public partial class App : System.Windows.Application
     private MainViewModel? _viewModel;
     private NaudioCaptureService? _audioCapture;
     private NativeHotkeyService? _hotkeyService;
-    private NativeHotkeyService? _autoCaptureHotkeyService;
     private ThemeService? _themeService;
     private NaudioLevelMonitorService? _levelMonitor;
     private AutoCaptureService? _autoCaptureService;
+    private WakeKeywordEngine? _wakeKeywordEngine;
+    private LocalTranscriptionClient? _localClient;
     private WindowsAutoCaptureMediaControlService? _mediaControlService;
     private HttpClient? _httpClient;
     private HttpClient? _fileHttpClient;
@@ -95,7 +96,6 @@ public partial class App : System.Windows.Application
             _httpClient = new HttpClient();
             _audioCapture = new NaudioCaptureService();
             _hotkeyService = new NativeHotkeyService();
-            _autoCaptureHotkeyService = new NativeHotkeyService();
             _levelMonitor = new NaudioLevelMonitorService();
             _themeService = new ThemeService(Resources);
             _themeService.ThemeChanged += (_, dark) =>
@@ -107,7 +107,10 @@ public partial class App : System.Windows.Application
 
             var settingsService = new JsonSettingsService();
             var secretStore = new DpapiSecretStore();
-            var groqClient = new GroqTranscriptionClient(_httpClient);
+            var localModels = new LocalModelStore(new HttpClient { Timeout = TimeSpan.FromMinutes(30) });
+            var localClient = new LocalTranscriptionClient(localModels, System.IO.Path.Combine(AppContext.BaseDirectory, "Tools", "Video", "ffmpeg.exe"), () => _viewModel?.Settings.LocalVoiceProfile, () => _viewModel?.Settings.LocalGpuEnabled ?? true, () => _viewModel?.Settings.SpeechPerformance);
+            _localClient = localClient;
+            var groqClient = new TranscriptionRouter(new GroqTranscriptionClient(_httpClient), localClient, () => _viewModel?.Settings.UseLocalTranscription == true);
             var updateService = new GitHubUpdateService(_httpClient);
             var textCleanup = new TextCleanupService();
             var insertionService = new WindowsTextInsertionService();
@@ -136,13 +139,15 @@ public partial class App : System.Windows.Application
                 keyboardCommandService,
                 overlayService);
 
-            _viewModel = new MainViewModel(settingsService, secretStore, groqClient, _audioCapture, _levelMonitor, _hotkeyService, _autoCaptureHotkeyService, startupService, orchestrator, updateService, _mediaControlService);
+            _viewModel = new MainViewModel(settingsService, secretStore, groqClient, _audioCapture, _levelMonitor, _hotkeyService, startupService, orchestrator, updateService, _mediaControlService);
+            _viewModel.LocalModels = new LocalModelsViewModel(localModels, localClient, () => _viewModel.Settings, () => _viewModel.AutoSaveSettingsAsync());
             _fileHttpClient = new HttpClient();
             _viewModel.FileTranscription = new FileTranscriptionViewModel(
                 new AudioFilePreparationService(System.IO.Path.Combine(AppContext.BaseDirectory, "Tools", "Flac", "flac.exe")),
-                new GroqTranscriptionClient(_fileHttpClient, TimeSpan.FromMinutes(10)),
+                new TranscriptionRouter(new GroqTranscriptionClient(_fileHttpClient, TimeSpan.FromMinutes(10)), localClient, () => _viewModel.Settings.UseLocalTranscription),
                 secretStore, () => _viewModel.Settings);
-            _autoCaptureService = new AutoCaptureService(settingsService, secretStore, _levelMonitor, _audioCapture, orchestrator, overlayService, wakeToneService);
+            _wakeKeywordEngine = new WakeKeywordEngine();
+            _autoCaptureService = new AutoCaptureService(settingsService, secretStore, _levelMonitor, _audioCapture, orchestrator, overlayService, wakeToneService, _wakeKeywordEngine);
             _viewModel.InputLevelPreviewChanged += async (_, visible) =>
             {
                 try
@@ -169,32 +174,95 @@ public partial class App : System.Windows.Application
             });
             _hotkeyService.Pressed += async (_, _) => { if (!_isQuitting) await _viewModel.HandleHotkeyPressedAsync(); };
             _hotkeyService.Released += async (_, _) => { if (!_isQuitting) await _viewModel.HandleHotkeyReleasedAsync(); };
-            _autoCaptureHotkeyService.Pressed += async (_, _) => { if (!_isQuitting) await _viewModel.HandleAutoCaptureHotkeyPressedAsync(); };
             _viewModel.SettingsChanged += (_, _) => _ = ApplyLiveSettingsAsync(overlayService);
             _viewModel.AutoCaptureToggleFeedbackRequested += (_, isListening) =>
                 autoCaptureToggleFeedbackService.Show(isListening, _viewModel.Settings.OverlayOpacity);
 
+            Task ReserveLocalPreparationAsync(bool reserved) => ReservePreparationCoreAsync(reserved, false);
+            async Task ReservePreparationCoreAsync(bool reserved, bool wakeOwner)
+                {
+                    if (reserved)
+                    {
+                        if (_viewModel.NoteCaptureActive || (!wakeOwner && _viewModel.IsWakeVoiceRecording) || _viewModel.IsScratchpadRecording)
+                            throw new InvalidOperationException("Finish the current recording or conversation before voice setup or model preparation.");
+                        await orchestrator.ReserveForNotesAsync(true);
+                        try
+                        {
+                            _autoCaptureService.Suspended = true;
+                            await _viewModel.SetNoteCaptureActiveAsync(true);
+                            await _autoCaptureService.ApplySettingsAsync(_viewModel.Settings, false);
+                        }
+                        catch
+                        {
+                            _autoCaptureService.Suspended = false;
+                            _viewModel.NoteCaptureActive = false;
+                            await orchestrator.ReserveForNotesAsync(false);
+                            throw;
+                        }
+                    }
+                    else
+                    {
+                        await orchestrator.ReserveForNotesAsync(false);
+                        await _viewModel.SetNoteCaptureActiveAsync(false);
+                        _autoCaptureService.Suspended = _isQuitting;
+                    }
+                    if (!reserved) await _autoCaptureService.ApplySettingsAsync(_viewModel.Settings, _viewModel.CanTranscribe);
+                }
+            _viewModel.LocalModels.ReserveRemovalAsync = ReserveLocalPreparationAsync;
+            _viewModel.WakeCalibration = new WakeCalibrationViewModel(_levelMonitor, _wakeKeywordEngine!, () => _viewModel.Settings,
+                reserved => ReservePreparationCoreAsync(reserved, true), () => _viewModel.AutoSaveSettingsAsync(), () => _viewModel.CanTranscribe);
+            _viewModel.WakeCalibration.PropertyChanged += (_, args) =>
+            { if (args.PropertyName is nameof(WakeCalibrationViewModel.IsBusy) or nameof(WakeCalibrationViewModel.IsRecording) or nameof(WakeCalibrationViewModel.IsWizardOpen)) _viewModel.SetWakeCalibrationState(_viewModel.WakeCalibration.IsWorking || _viewModel.WakeCalibration.IsWizardOpen); };
+            _autoCaptureService.WakeStatusChanged += (_, message) => _viewModel.WakeCalibration.ReportRuntime(message);
+            _viewModel.LocalModels.VoiceSetup = new VoiceSetupViewModel(_audioCapture, () => _viewModel.Settings,
+                localClient.TranscribeAsync, localModels.IsInstalled, ReserveLocalPreparationAsync, () => _viewModel.AutoSaveSettingsAsync());
+            var comparison = new SpeechPerformanceBenchmark(localClient.PrepareAsync, localClient.TranscribeAsync,
+                async (path, options, token) =>
+                {
+                    var key = await secretStore.GetApiKeyAsync(token);
+                    if (string.IsNullOrWhiteSpace(key)) throw new InvalidOperationException("Save a Groq key before comparing providers.");
+                    return await groqClient.TranscribeAsync(key, path, options, token);
+                }, () => localClient.RuntimeStatus, localClient.PrepareBackendAsync, localClient.SupportsGpu, () => localClient.ActualDevice, () => localClient.WorkerCpuSeconds, () => localClient.WorkerRamMb);
+            _viewModel.LocalModels.Recommendations = new LocalRecommendationsViewModel(() => _viewModel.Settings, () => localClient.Hardware,
+                localModels.IsInstalled, () => _viewModel.LocalModels.CanConfigure && !_viewModel.NoteCaptureActive && !_viewModel.IsWakeVoiceRecording && !_viewModel.IsScratchpadRecording,
+                () => _viewModel.HasApiKey, ReserveLocalPreparationAsync, () => _viewModel.AutoSaveSettingsAsync(),
+                _viewModel.LocalModels.ApplyRecommendationAsync, comparison, System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "BenchmarkSample.wav"));
+            _viewModel.LocalModels.Recommendations.PropertyChanged += (_, args) =>
+            { if (args.PropertyName == nameof(LocalRecommendationsViewModel.IsBusy)) _viewModel.LocalModels.Refresh(); };
+            _viewModel.PropertyChanged += (_, args) =>
+            {
+                if (args.PropertyName is nameof(MainViewModel.NoteCaptureActive) or nameof(MainViewModel.IsWakeVoiceRecording) or nameof(MainViewModel.IsScratchpadRecording) or nameof(MainViewModel.HasApiKey))
+                    _viewModel.LocalModels.Recommendations.Refresh();
+            };
+            _viewModel.LocalModels.VoiceSetup.PropertyChanged += (_, args) =>
+            {
+                if (args.PropertyName is nameof(VoiceSetupViewModel.IsBusy) or nameof(VoiceSetupViewModel.IsRecording)) _viewModel.LocalModels.Refresh();
+            };
             await _viewModel.InitializeAsync();
+            await _viewModel.WakeCalibration.InitializeAsync();
+            _viewModel.LocalModels.VoiceSetup.Load();
+            _viewModel.LocalModels.Recommendations.Load();
+            _ = _viewModel.LocalModels.InitializeAsync(System.IO.Path.Combine(AppContext.BaseDirectory, "Tools", "LocalDefault"));
             _themeService.ApplyPreference(_viewModel.Settings.Theme);
             await _autoCaptureService.RefreshAsync();
             _notesHttpClient = new HttpClient();
             _viewModel.Notes = new NotesViewModel(
                 new ConversationCapture(() => _viewModel.Settings),
                 new LocalSpeakerIdentifier(System.IO.Path.Combine(AppContext.BaseDirectory, "Tools", "Speakers"), () => _viewModel.Settings.SpeakerMatchThreshold),
-                new GroqNoteIntelligence(_notesHttpClient), secretStore, new NoteStore(),
+                new NoteTranscriptionRouter(new GroqNoteIntelligence(_notesHttpClient), localClient, () => _viewModel.Settings.UseLocalTranscription), secretStore, new NoteStore(),
                 new VideoImporter(System.IO.Path.Combine(AppContext.BaseDirectory, "Tools", "Video")),
                 () => _viewModel.Settings,
                 action => Dispatcher.InvokeAsync(action).Task.Unwrap(),
                 async reserved =>
                 {
-                    if (reserved && _viewModel.IsWakeVoiceRecording)
-                        throw new InvalidOperationException("Finish wake-voice training before starting notes.");
+                    if (reserved && (_viewModel.NoteCaptureActive || _viewModel.IsWakeVoiceRecording || _viewModel.LocalModels?.VoiceSetup?.CanEdit == false || _viewModel.LocalModels?.Recommendations?.IsBusy == true))
+                        throw new InvalidOperationException("Finish model testing, voice setup or wake-voice training before starting notes.");
                     _autoCaptureService.Suspended = reserved;
                     try
                     {
                         await orchestrator.ReserveForNotesAsync(reserved);
                         await _viewModel.SetNoteCaptureActiveAsync(reserved);
-                        await _autoCaptureService.ApplySettingsAsync(_viewModel.Settings, _viewModel.HasApiKey);
+                        await _autoCaptureService.ApplySettingsAsync(_viewModel.Settings, _viewModel.CanTranscribe);
                     }
                     catch
                     {
@@ -208,7 +276,7 @@ public partial class App : System.Windows.Application
             _viewModel.Videos = new NotesViewModel(
                 new ConversationCapture(() => _viewModel.Settings),
                 new LocalSpeakerIdentifier(System.IO.Path.Combine(AppContext.BaseDirectory, "Tools", "Speakers"), () => _viewModel.Settings.SpeakerMatchThreshold),
-                new GroqNoteIntelligence(_notesHttpClient), secretStore, new NoteStore(),
+                new NoteTranscriptionRouter(new GroqNoteIntelligence(_notesHttpClient), localClient, () => _viewModel.Settings.UseLocalTranscription), secretStore, new NoteStore(),
                 new VideoImporter(System.IO.Path.Combine(AppContext.BaseDirectory, "Tools", "Video")),
                 () => _viewModel.Settings, action => Dispatcher.InvokeAsync(action).Task.Unwrap(),
                 _ => Task.CompletedTask, () => _viewModel.AutoSaveSettingsAsync(), NoteLibrary.YouTube);
@@ -273,7 +341,7 @@ public partial class App : System.Windows.Application
         {
             _themeService?.ApplyPreference(_viewModel.Settings.Theme);
             overlayService.SetOpacity(_viewModel.Settings.OverlayOpacity);
-            await _autoCaptureService.ApplySettingsAsync(_viewModel.Settings, _viewModel.HasApiKey);
+            await _autoCaptureService.ApplySettingsAsync(_viewModel.Settings, _viewModel.CanTranscribe);
             _viewModel.InputLevelPreviewError = string.Empty;
         }
         catch (Exception ex)
@@ -291,11 +359,17 @@ public partial class App : System.Windows.Application
         if (_autoCaptureService is not null) _autoCaptureService.Suspended = true;
         if (_viewModel is not null)
         {
+            if (_viewModel.WakeCalibration is { } calibration) await calibration.ShutdownAsync();
+            if (_viewModel.LocalModels?.Recommendations is { } recommendation) await recommendation.ShutdownAsync();
+            if (_viewModel.LocalModels?.VoiceSetup is { } setup) await setup.ShutdownAsync();
+            if (_viewModel.LocalModels is { } models) await models.ShutdownAsync();
             await _viewModel.Notes.ShutdownAsync();
             await _viewModel.Videos.ShutdownAsync();
             await _viewModel.StopIfNeededAsync();
         }
 
+        if (_autoCaptureService is not null) await _autoCaptureService.StopWakeWorkerAsync();
+        _wakeKeywordEngine?.Dispose(); _wakeKeywordEngine = null;
         Shutdown();
     }
 
@@ -315,10 +389,10 @@ public partial class App : System.Windows.Application
     {
         _trayService?.Dispose();
         _viewModel?.FileTranscription.Cancel();
+        _localClient?.Dispose(); _localClient = null;
         _fileHttpClient?.Dispose();
         _notesHttpClient?.Dispose();
         _hotkeyService?.Dispose();
-        _autoCaptureHotkeyService?.Dispose();
         if (_mediaControlService is not null)
         {
             try

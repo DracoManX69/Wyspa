@@ -1,11 +1,80 @@
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:local="clr-namespace:Wyspa.App" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" x:Class="Wyspa.App.MainWindow" Title="WyspaFluent" Style="{StaticResource {x:Type Window}}" Icon="Assets/AppIcon.ico" Width="1180" Height="860" MinWidth="560" MinHeight="480" PreviewKeyDown="Window_OnPreviewKeyDown" Background="{DynamicResource AppBackgroundBrush}" xmlns:models="clr-namespace:Wyspa.Core.Models;assembly=Wyspa.Core">
     <Window.CommandBindings>
+        <CommandBinding Command="{x:Static local:AppNavigationCommands.OpenLocalSettings}" Executed="OpenLocalSettings_OnExecuted" />
         <CommandBinding Command="{x:Static local:AppNavigationCommands.OpenGroqSettings}" Executed="OpenGroqSettings_OnExecuted" />
         <CommandBinding Command="{x:Static local:AppNavigationCommands.OpenAudioSettings}" Executed="OpenAudioSettings_OnExecuted" />
         <CommandBinding Command="{x:Static local:AppNavigationCommands.OpenConversationSettings}" Executed="OpenConversationSettings_OnExecuted" />
         <CommandBinding Command="{x:Static local:AppNavigationCommands.OpenRepository}" Executed="OpenRepository_OnExecuted" />
     </Window.CommandBindings>
     <Window.Resources>
+        <local:LocalTableHeightConverter x:Key="TableHeight" />
+        <Style x:Key="LocalTableCell" TargetType="DataGridCell">
+            <Setter Property="Foreground" Value="{DynamicResource InkBrush}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="DataGridCell">
+                <Border Background="{TemplateBinding Background}" Padding="6,2"><ContentPresenter VerticalAlignment="Center" /></Border>
+            </ControlTemplate></Setter.Value></Setter>
+        </Style>
+        <Style x:Key="LocalTableRow" TargetType="DataGridRow">
+            <Setter Property="Background" Value="{DynamicResource PanelAltBrush}" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="DataGridRow">
+                <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" SnapsToDevicePixels="True"><DataGridCellsPresenter x:Name="PART_CellsPresenter" /></Border>
+            </ControlTemplate></Setter.Value></Setter>
+        </Style>
+        <Style x:Key="ModelManagerRow" TargetType="DataGridRow" BasedOn="{StaticResource LocalTableRow}">
+            <Style.Triggers><DataTrigger Binding="{Binding IsSelected}" Value="True"><Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" /></DataTrigger></Style.Triggers>
+        </Style>
+        <Style x:Key="LocalTableText" TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+        <Style x:Key="LocalHeaderGrip" TargetType="Thumb"><Setter Property="Width" Value="6" /><Setter Property="Background" Value="Transparent" /><Setter Property="Cursor" Value="SizeWE" /><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Thumb"><Border Background="{TemplateBinding Background}" /></ControlTemplate></Setter.Value></Setter></Style>
+        <Style x:Key="LocalTableHeader" TargetType="DataGridColumnHeader" BasedOn="{StaticResource {x:Type DataGridColumnHeader}}">
+            <Setter Property="HorizontalContentAlignment" Value="Center" /><Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="DataGridColumnHeader">
+                <Border Background="{DynamicResource PanelAltBrush}" BorderBrush="{DynamicResource LineBrush}" BorderThickness="0,0,1,1">
+                    <Grid MinHeight="32">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True" />
+                        <Thumb x:Name="PART_LeftHeaderGripper" HorizontalAlignment="Left" Style="{StaticResource LocalHeaderGrip}" />
+                        <Thumb x:Name="PART_RightHeaderGripper" HorizontalAlignment="Right" Style="{StaticResource LocalHeaderGrip}" />
+                    </Grid>
+                </Border>
+            </ControlTemplate></Setter.Value></Setter>
+        </Style>
+        <Style x:Key="PerformanceRow" TargetType="DataGridRow" BasedOn="{StaticResource LocalTableRow}">
+            <Style.Triggers><DataTrigger Binding="{Binding IsWinner}" Value="True"><Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" /><Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" /><Setter Property="FontWeight" Value="SemiBold" /></DataTrigger></Style.Triggers>
+        </Style>
+        <Style x:Key="LocalTable" TargetType="DataGrid" BasedOn="{StaticResource {x:Type DataGrid}}">
+            <Setter Property="ColumnHeaderStyle" Value="{StaticResource LocalTableHeader}" />
+            <Setter Property="CellStyle" Value="{StaticResource LocalTableCell}" />
+            <Setter Property="RowStyle" Value="{StaticResource LocalTableRow}" />
+            <Setter Property="HorizontalScrollBarVisibility" Value="Auto" />
+            <Setter Property="VerticalScrollBarVisibility" Value="Auto" />
+            <Setter Property="HeadersVisibility" Value="Column" />
+            <Setter Property="CanUserSortColumns" Value="False" />
+        </Style>
+
+        <BooleanToVisibilityConverter x:Key="BooleanVisibility" />
+        <Style x:Key="TestingSpinner" TargetType="Grid">
+            <Setter Property="Width" Value="24" />
+            <Setter Property="Height" Value="24" />
+            <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
+            <Setter Property="RenderTransform"><Setter.Value><RotateTransform /></Setter.Value></Setter>
+            <Style.Triggers>
+                <Trigger Property="IsVisible" Value="True">
+                    <Trigger.EnterActions>
+                        <BeginStoryboard Name="SpinnerRotation"><Storyboard RepeatBehavior="Forever"><DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)" From="0" To="360" Duration="0:0:1" /></Storyboard></BeginStoryboard>
+                    </Trigger.EnterActions>
+                    <Trigger.ExitActions><RemoveStoryboard BeginStoryboardName="SpinnerRotation" /></Trigger.ExitActions>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
         <Style x:Key="NavigationIcon" TargetType="Path">
             <Setter Property="Stroke" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type TabItem}}}" />
             <Setter Property="StrokeThickness" Value="1.6" />
@@ -49,33 +118,33 @@
                                     </StackPanel>
                                 </Border>
                                 <TextBlock Text="Getting Started" Style="{StaticResource SectionTitle}" />
-                                <TextBlock Text="Connect Wyspa to Groq, then check your input before your first dictation." Style="{StaticResource BodyText}" Margin="0,0,0,12" />
+                                <TextBlock Text="New installations include lightweight English dictation. Local processing starts without an account or voice training; the engine prepares in the background." Style="{StaticResource BodyText}" Margin="0,0,0,12" />
                                 <Border Style="{StaticResource Card}" Padding="0">
                                     <StackPanel>
                                         <StackPanel Margin="16">
-                                            <TextBlock Text="1. Create a Groq account" FontWeight="SemiBold" />
-                                            <TextBlock Text="Open Groq Console, sign up or sign in, and complete the account setup." Style="{StaticResource BodyText}" Margin="0,4,0,8" />
-                                            <TextBlock Style="{StaticResource BodyText}"><Hyperlink NavigateUri="https://console.groq.com/" RequestNavigate="Hyperlink_OnRequestNavigate" ToolTip="Open the official Groq website in your browser.">Open Groq Console</Hyperlink></TextBlock>
+                                            <TextBlock Text="1. Check your microphone" FontWeight="SemiBold" />
+                                            <TextBlock Text="Use the Windows default input, or choose your microphone in Audio &amp; Capture and check the level meter." Style="{StaticResource BodyText}" Margin="0,4,0,8" />
+                                            <Button Content="Open Audio &amp; Capture" Command="{x:Static local:AppNavigationCommands.OpenAudioSettings}" HorizontalAlignment="Left" ToolTip="Choose and check your microphone, listening mode and shortcut." />
                                         </StackPanel>
                                         <Border Style="{StaticResource SettingsRow}">
                                             <StackPanel>
-                                                <TextBlock Text="2. Create an API key" FontWeight="SemiBold" />
-                                                <TextBlock Text="In Groq Console, open API Keys and create a new key for Wyspa. Copy the key and keep it private." Style="{StaticResource BodyText}" Margin="0,4,0,8" />
-                                                <TextBlock Style="{StaticResource BodyText}"><Hyperlink NavigateUri="https://console.groq.com/keys" RequestNavigate="Hyperlink_OnRequestNavigate" ToolTip="Open the official Groq website in your browser.">Open API Keys</Hyperlink></TextBlock>
+                                                <TextBlock Text="2. Start dictating" FontWeight="SemiBold" />
+                                                <TextBlock Text="Focus a text field and use the shortcut shown above. Press it again to stop. Stream Mode can insert words while you speak; your complete dictation is also kept on the clipboard." Style="{StaticResource BodyText}" Margin="0,4,0,8" />
                                             </StackPanel>
                                         </Border>
                                         <Border Style="{StaticResource SettingsRow}">
                                             <StackPanel>
-                                                <TextBlock Text="3. Connect Wyspa" FontWeight="SemiBold" />
-                                                <TextBlock Text="Go to Settings → Groq, paste your key, then select Save and test key. Wyspa stores it encrypted for your Windows user. Choose your transcription and summary models in the same section." Style="{StaticResource BodyText}" Margin="0,4,0,8" />
-                                                <Button Content="Open Groq settings" Command="{x:Static local:AppNavigationCommands.OpenGroqSettings}" HorizontalAlignment="Left" ToolTip="Open the Groq connection and model settings." />
+                                                <TextBlock Text="Optional: choose a different model" FontWeight="SemiBold" />
+                                                <TextBlock Text="Try Whisper for punctuation, other languages or GPU acceleration. Voice setup can test accuracy and tune pause timing, but is optional." Style="{StaticResource BodyText}" Margin="0,4,0,8" />
+                                                <Button Content="Local model settings" Command="{x:Static local:AppNavigationCommands.OpenLocalSettings}" HorizontalAlignment="Left" ToolTip="Choose models, GPU acceleration and optional voice setup." />
                                             </StackPanel>
                                         </Border>
                                         <Border Style="{StaticResource SettingsRow}">
                                             <StackPanel>
-                                                <TextBlock Text="4. Check your input and start dictating" FontWeight="SemiBold" />
-                                                <TextBlock Text="In Audio &amp; Capture, choose your Input Device and check your speaking level under SmartListen Threshold. Choose a trigger mode and shortcut, then start dictation. Audio is sent to Groq when you transcribe." Style="{StaticResource BodyText}" Margin="0,4,0,8" />
-                                                <Button Content="Open Audio &amp; Capture" ToolTip="Open microphone, listening and shortcut settings." Command="{x:Static local:AppNavigationCommands.OpenAudioSettings}" HorizontalAlignment="Left" />
+                                                <TextBlock Text="Optional: use Groq cloud processing" FontWeight="SemiBold" />
+                                                <TextBlock Text="If local recognition is too slow or you want cloud features, create a Groq account and API key, then save and test the key in Groq settings. Turn local transcription off to use Groq." Style="{StaticResource BodyText}" Margin="0,4,0,8" />
+                                                <TextBlock Style="{StaticResource BodyText}"><Hyperlink NavigateUri="https://console.groq.com/keys" RequestNavigate="Hyperlink_OnRequestNavigate" ToolTip="Open the official Groq website to create an optional cloud API key.">Open Groq Console</Hyperlink></TextBlock>
+                                                <Button Content="Open Groq settings" Command="{x:Static local:AppNavigationCommands.OpenGroqSettings}" HorizontalAlignment="Left" ToolTip="Set up optional cloud processing." />
                                             </StackPanel>
                                         </Border>
                                     </StackPanel>
@@ -146,6 +215,150 @@
                                 </StackPanel.Resources>
                                 <TextBlock Text="Settings" Style="{StaticResource PageTitle}" />
                                 <TextBlock Text="Make Wyspa work your way. Preferences save automatically; keys and shortcuts have a Save button." Style="{StaticResource BodyText}" Margin="0,0,0,24" />
+                                <Expander x:Name="LocalSettingsGroup" Header="Local models" Tag="Private transcription on this computer · no API key required" Uid="&#xE770;" Style="{StaticResource SettingsGroup}" AutomationProperties.Name="Local models settings">
+                                    <StackPanel DataContext="{Binding LocalModels}">
+                                        <HeaderedContentControl Style="{StaticResource SettingsField}" Header="Use local transcription" Tag="On keeps speech recognition on this PC. Off uses Groq. Voice setup is optional; install a model below if needed.">
+                                            <CheckBox Style="{StaticResource SettingsToggle}" IsChecked="{Binding Enabled}" IsEnabled="{Binding CanEnable}" AutomationProperties.Name="Use local transcription" ToolTip="Enable local mode to manage models and transcribe without a Groq key." />
+                                        </HeaderedContentControl>
+                                        <StackPanel IsEnabled="{Binding Enabled}">
+                                            <StackPanel.Style><Style TargetType="StackPanel"><Style.Triggers><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45" /></Trigger></Style.Triggers></Style></StackPanel.Style>
+                                        <HeaderedContentControl Style="{StaticResource SettingsField}" Header="GPU acceleration" Tag="Allow compatible models to use the GPU. This option is unavailable if no compatible GPU is detected.">
+                                            <StackPanel>
+                                                <CheckBox Content="Use GPU acceleration when available" IsChecked="{Binding GpuEnabled}" IsEnabled="{Binding CanUseGpu}" AutomationProperties.Name="Use GPU acceleration when available" ToolTip="Use a detected compatible Vulkan GPU for Whisper. Applies when the next model context loads." />
+                                                <TextBlock Text="GPU permission lets Wyspa choose a supported GPU. Compare Models measures CPU and GPU separately where supported, and Wyspa uses the faster comparable result for each model. CPU-only engines stay on CPU." Style="{StaticResource BodyText}" />
+                                                <TextBlock Text="{Binding RuntimeStatus}" Style="{StaticResource BodyText}" Margin="0,8,0,0" AutomationProperties.LiveSetting="Polite" />
+                                            </StackPanel>
+                                        </HeaderedContentControl>
+                                        <Border Style="{StaticResource Card}">
+                                            <StackPanel>
+                                                <TextBlock Text="Model Manager" Style="{StaticResource FieldLabel}" />
+                                                <TextBlock Text="All available local models. Select checkboxes to install or remove a batch; choose Use to make an installed model active. Hover over a model for languages, engine and other details. Downloads are verified before installation." Style="{StaticResource BodyText}" Margin="0,4,0,12" />
+                                                <DataGrid ItemsSource="{Binding Items}" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" CanUserDeleteRows="False" CanUserSortColumns="False" HeadersVisibility="Column" RowHeight="62" MaxHeight="{Binding ActualHeight, ElementName=SettingsScroll, Converter={StaticResource TableHeight}, ConverterParameter=410}" HorizontalScrollBarVisibility="Auto" AutomationProperties.Name="Local model manager" Style="{StaticResource LocalTable}" RowStyle="{StaticResource ModelManagerRow}" SelectionChanged="LocalTable_OnSelectionChanged">
+                                                    <DataGrid.Resources><Style TargetType="ScrollViewer" BasedOn="{StaticResource {x:Type ScrollViewer}}"><Setter Property="HorizontalScrollBarVisibility" Value="Auto" /><Setter Property="VerticalScrollBarVisibility" Value="Auto" /></Style></DataGrid.Resources>
+                                                    <DataGrid.Columns>
+                                                        <DataGridTemplateColumn HeaderStyle="{StaticResource LocalTableHeader}" Header="Select" Width="60"><DataGridTemplateColumn.CellTemplate><DataTemplate>
+                                                            <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanSelect}" HorizontalAlignment="Center" VerticalAlignment="Center" AutomationProperties.Name="{Binding Name, StringFormat=Select {0}}" ToolTip="Select this model for a batch install or removal." Style="{x:Null}" />
+                                                        </DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
+                                                        <DataGridTemplateColumn HeaderStyle="{StaticResource LocalTableHeader}" Header="Model" Width="230"><DataGridTemplateColumn.CellTemplate><DataTemplate>
+                                                            <StackPanel VerticalAlignment="Center" Margin="6,0" ToolTip="{Binding Details}">
+                                                                <TextBlock Text="{Binding Name}" TextWrapping="Wrap" />
+                                                            </StackPanel>
+                                                        </DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
+                                                        <DataGridTextColumn HeaderStyle="{StaticResource LocalTableHeader}" Header="Size" Binding="{Binding Size}" Width="80" ElementStyle="{StaticResource LocalTableText}" />
+                                                        <DataGridTemplateColumn HeaderStyle="{StaticResource LocalTableHeader}" Header="Status" Width="160"><DataGridTemplateColumn.CellTemplate><DataTemplate>
+                                                            <StackPanel VerticalAlignment="Center" Margin="6,0">
+                                                                <TextBlock Text="{Binding State}" TextWrapping="Wrap" MaxHeight="36" ToolTip="{Binding State}" AutomationProperties.LiveSetting="Polite" />
+                                                                <ProgressBar Value="{Binding Progress, Mode=OneWay}" Maximum="100" Height="4" Margin="0,5,0,0" Visibility="{Binding IsWorking, Converter={StaticResource BooleanVisibility}}" AutomationProperties.Name="{Binding Name, StringFormat=Download progress for {0}}" />
+                                                            </StackPanel>
+                                                        </DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
+                                                        <DataGridTemplateColumn HeaderStyle="{StaticResource LocalTableHeader}" Header="Action" Width="120"><DataGridTemplateColumn.CellTemplate><DataTemplate>
+                                                            <Button Content="{Binding ActionLabel}" Command="{Binding ManageCommand}" Margin="4,0" HorizontalAlignment="Center" VerticalAlignment="Center" AutomationProperties.Name="{Binding Name, StringFormat=Install or remove {0}}" ToolTip="Install a missing model, or remove its downloaded files." />
+                                                        </DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
+                                                        <DataGridTemplateColumn HeaderStyle="{StaticResource LocalTableHeader}" Header="About" Width="120"><DataGridTemplateColumn.CellTemplate><DataTemplate>
+                                                            <Button Tag="{Binding InfoUrl}" Click="ModelInfo_OnClick" Width="32" Height="32" Padding="4" Margin="4,0" HorizontalAlignment="Center" VerticalAlignment="Center" AutomationProperties.Name="{Binding Name, StringFormat=Information about {0}}" ToolTip="Open the publisher's model card or project page in your browser.">
+                                                                <Viewbox Width="16" Height="16"><Canvas Width="24" Height="24"><Path Data="M14,4 H20 V10 M20,4 L11,13 M10,5 H6 Q4,5 4,7 V18 Q4,20 6,20 H17 Q19,20 19,18 V14" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" /></Canvas></Viewbox>
+                                                            </Button>
+                                                        </DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
+                                                        <DataGridTemplateColumn HeaderStyle="{StaticResource LocalTableHeader}" Header="Dictation" Width="80"><DataGridTemplateColumn.CellTemplate><DataTemplate>
+                                                            <Button Content="{Binding UseLabel}" Command="{Binding UseCommand}" Margin="4,0" HorizontalAlignment="Center" VerticalAlignment="Center" AutomationProperties.Name="{Binding Name, StringFormat=Use {0}}" ToolTip="Use this installed model for local transcription." />
+                                                        </DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
+                                                    </DataGrid.Columns>
+                                                </DataGrid>
+                                                <WrapPanel Margin="0,12,0,4">
+                                                    <Button Content="Install selected" Command="{Binding InstallSelectedCommand}" Style="{StaticResource PrimaryButton}" ToolTip="Download selected missing models, up to two together. Installed selections are kept." />
+                                                    <Button Content="Remove selected" Command="{Binding RemoveSelectedCommand}" ToolTip="Remove selected installed models. If the active model is removed, another installed model is used when available." />
+                                                    <Button Content="Cancel batch" Command="{Binding CancelCommand}" ToolTip="Cancel outstanding downloads or removals. Completed changes are kept." />
+                                                </WrapPanel>
+                                                <TextBlock Text="{Binding SelectionSummary}" Style="{StaticResource BodyText}" />
+                                                <TextBlock Text="{Binding Status}" Style="{StaticResource BodyText}" Margin="0,4,0,0" AutomationProperties.LiveSetting="Polite" />
+                                                <TextBlock Text="{Binding Availability}" Style="{StaticResource BodyText}" Margin="0,8,0,0" />
+                                                <TextBlock Text="{Binding StoragePath}" Style="{StaticResource BodyText}" Margin="0,4,0,0" />
+                                            </StackPanel>
+                                        </Border>
+                                        <Expander Header="Model advice and local / Groq comparison" IsExpanded="{Binding Recommendations.IsExpanded}" Margin="16,4,16,16" AutomationProperties.Name="Model recommendations and speed comparison">
+                                            <StackPanel DataContext="{Binding Recommendations}" Margin="0,12,0,0">
+                                                <TextBlock Text="{Binding HardwareSuggestion}" Style="{StaticResource BodyText}" />
+                                                <TextBlock Text="Test every installed local model, including Whisper, Zipformer, Parakeet and Moonshine. The same 11-second English public speech sample is used for all providers. No microphone recording is made. No model weights are downloaded by the test. Faster-Whisper GPU testing may prepare its optional CUDA runtime once; its download size is shown in the model details." Style="{StaticResource BodyText}" Margin="0,8,0,8" />
+                                                <WrapPanel>
+                                                    <Button Content="Compare Models" Command="{Binding TestLocalCommand}" Style="{StaticResource PrimaryButton}" ToolTip="Measure installed models on this PC using the included sample. No upload or microphone capture." />
+                                                    <Button Content="Compare with Groq" Command="{Binding CompareGroqCommand}" ToolTip="Send the included public sample to your selected Groq speech model using your saved key. Four test requests; API quota may apply. No user recordings are sent." />
+                                                    <Button Content="Cancel test" Command="{Binding CancelCommand}" ToolTip="Cancel testing and resume dictation. Completed timings are retained." />
+                                                </WrapPanel>
+                                                <TextBlock Text="{Binding ComparisonAvailability}" Style="{StaticResource BodyText}" Margin="0,8,0,0" />
+                                                <DockPanel Margin="0,8,0,8">
+                                                    <Grid Style="{StaticResource TestingSpinner}" Visibility="{Binding IsBusy, Converter={StaticResource BooleanVisibility}}" Margin="0,0,10,0" VerticalAlignment="Center" AutomationProperties.Name="Model testing in progress">
+                                                        <Canvas Width="24" Height="24">
+                                                        <Line X1="12.00" Y1="6.00" X2="12.00" Y2="2.00" Stroke="{DynamicResource AccentBrush}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Opacity="0.08" />
+                                                        <Line X1="15.00" Y1="6.80" X2="17.00" Y2="3.34" Stroke="{DynamicResource AccentBrush}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Opacity="0.17" />
+                                                        <Line X1="17.20" Y1="9.00" X2="20.66" Y2="7.00" Stroke="{DynamicResource AccentBrush}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Opacity="0.25" />
+                                                        <Line X1="18.00" Y1="12.00" X2="22.00" Y2="12.00" Stroke="{DynamicResource AccentBrush}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Opacity="0.33" />
+                                                        <Line X1="17.20" Y1="15.00" X2="20.66" Y2="17.00" Stroke="{DynamicResource AccentBrush}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Opacity="0.42" />
+                                                        <Line X1="15.00" Y1="17.20" X2="17.00" Y2="20.66" Stroke="{DynamicResource AccentBrush}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Opacity="0.50" />
+                                                        <Line X1="12.00" Y1="18.00" X2="12.00" Y2="22.00" Stroke="{DynamicResource AccentBrush}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Opacity="0.58" />
+                                                        <Line X1="9.00" Y1="17.20" X2="7.00" Y2="20.66" Stroke="{DynamicResource AccentBrush}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Opacity="0.67" />
+                                                        <Line X1="6.80" Y1="15.00" X2="3.34" Y2="17.00" Stroke="{DynamicResource AccentBrush}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Opacity="0.75" />
+                                                        <Line X1="6.00" Y1="12.00" X2="2.00" Y2="12.00" Stroke="{DynamicResource AccentBrush}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Opacity="0.83" />
+                                                        <Line X1="6.80" Y1="9.00" X2="3.34" Y2="7.00" Stroke="{DynamicResource AccentBrush}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Opacity="0.92" />
+                                                        <Line X1="9.00" Y1="6.80" X2="7.00" Y2="3.34" Stroke="{DynamicResource AccentBrush}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Opacity="1.00" />
+                                                        </Canvas>
+                                                    </Grid>
+                                                    <TextBlock Text="{Binding Status}" Style="{StaticResource BodyText}" VerticalAlignment="Center" AutomationProperties.LiveSetting="Polite" />
+                                                </DockPanel>
+                                                <DataGrid ItemsSource="{Binding Results}" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" CanUserDeleteRows="False" MaxHeight="{Binding ActualHeight, ElementName=SettingsScroll, Converter={StaticResource TableHeight}, ConverterParameter=250}" HorizontalScrollBarVisibility="Auto" AutomationProperties.Name="Measured transcription performance" Style="{StaticResource LocalTable}" RowStyle="{StaticResource PerformanceRow}" MinRowHeight="48" SelectionChanged="LocalTable_OnSelectionChanged">
+                                                    <DataGrid.Resources><Style TargetType="ScrollViewer" BasedOn="{StaticResource {x:Type ScrollViewer}}"><Setter Property="HorizontalScrollBarVisibility" Value="Auto" /><Setter Property="VerticalScrollBarVisibility" Value="Auto" /></Style></DataGrid.Resources>
+                                                    <DataGrid.Columns>
+                                                        <DataGridTextColumn HeaderStyle="{StaticResource LocalTableHeader}" Header="Score" Binding="{Binding ScoreDisplay}" Width="76" ElementStyle="{StaticResource LocalTableText}" />
+                                                        <DataGridTextColumn HeaderStyle="{StaticResource LocalTableHeader}" Header="Model" Binding="{Binding Name}" Width="200" ElementStyle="{StaticResource LocalTableText}" />
+                                                        <DataGridTextColumn HeaderStyle="{StaticResource LocalTableHeader}" Header="Device" Binding="{Binding DeviceDisplay}" Width="110" ElementStyle="{StaticResource LocalTableText}" />
+                                                        <DataGridTextColumn HeaderStyle="{StaticResource LocalTableHeader}" Header="Avg. Result" Binding="{Binding TypicalDisplay}" Width="112" ElementStyle="{StaticResource LocalTableText}" />
+                                                        <DataGridTextColumn HeaderStyle="{StaticResource LocalTableHeader}" Header="1st Result" Binding="{Binding FirstDisplay}" Width="90" ElementStyle="{StaticResource LocalTableText}" />
+                                                        <DataGridTextColumn HeaderStyle="{StaticResource LocalTableHeader}" Header="CPU Time" Binding="{Binding CpuDisplay}" Width="100" ElementStyle="{StaticResource LocalTableText}" />
+                                                        <DataGridTextColumn HeaderStyle="{StaticResource LocalTableHeader}" Header="RAM" Binding="{Binding MemoryDisplay}" Width="85" ElementStyle="{StaticResource LocalTableText}" />
+                                                        <DataGridTextColumn HeaderStyle="{StaticResource LocalTableHeader}" Header="Errors" Binding="{Binding AccuracyDisplay}" Width="170" ElementStyle="{StaticResource LocalTableText}" />
+                                                    </DataGrid.Columns>
+                                                </DataGrid>
+                                                <TextBlock Text="{Binding Winner}" Style="{StaticResource FieldLabel}" Margin="0,8,0,4" AutomationProperties.LiveSetting="Polite" />
+                                                <TextBlock Text="Score: 80% sample recognition quality, 20% response time. Higher is better; errors receive a strong penalty. Scores describe this sample, not universal model accuracy." Style="{StaticResource BodyText}" />
+                                                <TextBlock Text="Avg. Result is the mean of three repeat tests. First test includes loading or cache reuse and the first result. Local time measures decoding; Groq time includes upload, network, server processing and response. Groq server processing is not exposed separately. CPU Time and RAM include this app and its local inference worker, including other activity; GPU memory use is not measured. This sample does not establish performance for your accent, languages, long conversations or live-stream latency." Style="{StaticResource BodyText}" Margin="0,8,0,8" />
+                                                <TextBlock Text="{Binding MeasurementDate}" Style="{StaticResource BodyText}" />
+                                                <TextBlock Text="{Binding Recommendation}" Style="{StaticResource BodyText}" Margin="0,8,0,8" FontWeight="SemiBold" AutomationProperties.LiveSetting="Polite" />
+                                                <Button Content="{Binding ApplyLabel}" Command="{Binding ApplyCommand}" HorizontalAlignment="Left" ToolTip="Apply the suggested provider/model. A missing local model will be downloaded and verified. Your choice is not changed automatically by a test." />
+                                            </StackPanel>
+                                        </Expander>
+                                        <Expander Header="Voice setup and testing · optional" IsExpanded="{Binding VoiceSetup.IsExpanded}" IsEnabled="{Binding CanTrain}" Margin="16,4,16,16" AutomationProperties.Name="Voice setup and testing">
+                                            <StackPanel DataContext="{Binding VoiceSetup}" Margin="0,12,0,0">
+                                                <TextBlock Text="{Binding SavedSummary}" Style="{StaticResource BodyText}" />
+                                                <TextBlock Text="You can skip this and start dictating. Read three passages to measure recognition and tune SmartListen pause timing to your pace. Vocabulary hints apply to Whisper and Faster-Whisper models. Other local engines do not use these prompt hints. This does not retrain acoustic weights or learn your accent or personality. Recordings are processed locally and deleted after each test. Only preferences and scores are saved." Style="{StaticResource BodyText}" Margin="0,8,0,12" />
+                                                <TextBlock Text="Language code (en, fr, de, or auto)" Style="{StaticResource FieldLabel}" />
+                                                <TextBox Text="{Binding Language, UpdateSourceTrigger=PropertyChanged}" MaxLength="12" IsEnabled="{Binding CanEdit}" AutomationProperties.Name="Voice setup language" ToolTip="Use the language of the passage. English-only models always use English." />
+                                                <TextBlock Text="Personal names and vocabulary" Style="{StaticResource FieldLabel}" Margin="0,8,0,0" />
+                                                <TextBox Text="{Binding Vocabulary, UpdateSourceTrigger=PropertyChanged}" MaxLength="500" MinHeight="60" AcceptsReturn="True" TextWrapping="Wrap" IsEnabled="{Binding CanEdit}" AutomationProperties.Name="Personal vocabulary hints" ToolTip="Enter names, places and specialist terms. Do not paste the whole reference passage; that would bias the test." />
+                                                <TextBlock Text="{Binding Step}" TextWrapping="Wrap" FontWeight="SemiBold" Margin="0,12,0,8" />
+                                                <TextBox Text="{Binding Reference, UpdateSourceTrigger=PropertyChanged}" MaxLength="600" MinHeight="90" AcceptsReturn="True" TextWrapping="Wrap" IsEnabled="{Binding CanEdit}" AutomationProperties.Name="Read aloud passage" ToolTip="Read these words exactly in your natural voice. You may replace the passage with 8 or more words in your language, including personal vocabulary." />
+                                                <ProgressBar Value="{Binding Level, Mode=OneWay}" Maximum="1" Height="6" Margin="0,8,0,8" AutomationProperties.Name="Voice setup microphone level" />
+                                                <WrapPanel>
+                                                    <Button Content="Record passage" Command="{Binding RecordCommand}" ToolTip="Start recording the selected microphone locally. Nothing is uploaded." />
+                                                    <Button Content="Stop and test" Command="{Binding StopCommand}" ToolTip="Stop recording and compare recognition with and without vocabulary hints." />
+                                                    <Button Content="Cancel" Command="{Binding CancelCommand}" ToolTip="Stop recording or testing and delete the temporary recording." />
+                                                </WrapPanel>
+                                                <TextBlock Text="{Binding Status}" Style="{StaticResource BodyText}" Margin="0,8,0,8" AutomationProperties.LiveSetting="Polite" />
+                                                <TextBlock Text="Last result without personal hints" TextWrapping="Wrap" FontWeight="SemiBold" />
+                                                <TextBlock Text="{Binding Baseline}" Style="{StaticResource BodyText}" />
+                                                <TextBlock Text="Last result with personal hints" TextWrapping="Wrap" FontWeight="SemiBold" Margin="0,8,0,0" />
+                                                <TextBlock Text="{Binding Personalized}" Style="{StaticResource BodyText}" />
+                                                <TextBlock Text="{Binding Summary}" Style="{StaticResource BodyText}" Margin="0,8,0,8" />
+                                                <TextBlock Text="Lower word error is better; punctuation and case are ignored. This small test is not an accuracy guarantee. The first timing includes model loading. Test another downloaded model with Restart tests; speed and accuracy depend on your PC and speech." Style="{StaticResource BodyText}" />
+                                                <WrapPanel Margin="0,8,0,0">
+                                                    <Button Content="Save profile and use local" Command="{Binding SaveCommand}" ToolTip="After three readings, save language, vocabulary that did not worsen errors, and pace-based SmartListen pause timing. Enable local transcription." />
+                                                    <Button Content="Restart tests" Command="{Binding ResetCommand}" ToolTip="Clear these test results and read again, for example after changing the model or vocabulary. Keeps your saved profile until replaced." />
+                                                    <Button Content="Delete profile" Command="{Binding DeleteCommand}" ToolTip="Delete saved personal vocabulary and test scores. Current SmartListen timing is unchanged." />
+                                                </WrapPanel>
+                                            </StackPanel>
+                                        </Expander>
+                                        <TextBlock Text="The lightweight English model and engines are included with Wyspa. Transcription works offline. Speed depends on your PC and model; start with Zipformer for live dictation. Local mode skips Groq Tone Re-write, AI actions and Stream Fix, and cannot generate summaries. Basic cleanup and recognised keyboard commands remain available. YouTube imports still require internet." Style="{StaticResource BodyText}" Margin="16,0,16,16" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Expander>
                                 <Expander x:Name="GroqSettingsGroup" Header="Groq" Tag="Connection, transcription, and summary models" Uid="&#xE753;" Style="{StaticResource SettingsGroup}" IsExpanded="False" AutomationProperties.Name="Groq settings">
                                     <StackPanel>
                                         <HeaderedContentControl Style="{StaticResource SettingsField}" Header="API key" Tag="Encrypted for this Windows user. Save and test a key to connect to Groq.">
@@ -234,7 +447,7 @@
                                                     <ComboBox ItemsSource="{Binding Applications}" SelectedItem="{Binding SelectedApplication}" DisplayMemberPath="Name" IsEnabled="{Binding SupportsApplicationCapture}" AutomationProperties.Name="Calling app" ToolTip="Choose the calling app to capture, including its child processes. Requires a supported Windows build and computer-call mode." />
                                                 </StackPanel>
                                             </Grid>
-                                            <TextBlock Text="Uses the microphone selected in Audio &amp; Capture below. Room speaker detection is experimental: choose your detected speaker below. Headphones help keep call audio out of your microphone." Style="{StaticResource BodyText}" FontSize="11" Margin="0,5,0,0" />
+                                            <TextBlock Text="Conversations use the same selected transcription model as dictation. Computer-call mode labels microphone and playback channels without speaker-model downloads. In-person mode adds separate local voice segmentation and matching models (about 36 MB, downloaded once); Whisper and Zipformer do not supply stable speaker labels. Detection remains experimental. Uses the microphone in Audio &amp; Capture; headphones reduce call audio leaking into it." Style="{StaticResource BodyText}" FontSize="11" Margin="0,5,0,0" />
                                             <TextBlock Text="This Windows build supports output-device capture. App capture requires build 20348 or newer (Windows 11 recommended)." FontSize="11" Margin="0,5,0,0">
                                                 <TextBlock.Style>
                                                     <Style TargetType="TextBlock" BasedOn="{StaticResource BodyText}">
@@ -250,7 +463,7 @@
                                             <Expander Header="Timing and speaker sensitivity" Foreground="{DynamicResource MutedBrush}" Margin="0,6,0,0" IsEnabled="{Binding CanConfigure}">
                                                 <StackPanel Margin="0,5">
                                                     <TextBlock Text="{Binding Options.NoteChunkSeconds, StringFormat='Maximum live passage: {0:0.0} seconds'}" Style="{StaticResource BodyText}" />
-                                                    <Slider ToolTipService.InitialShowDelay="400" ToolTipService.BetweenShowDelay="100" ToolTipService.ShowDuration="20000" ToolTipService.ShowOnDisabled="True" AutomationProperties.Name="Maximum live passage in seconds" Minimum="1.5" Maximum="8" TickFrequency="0.5" IsSnapToTickEnabled="True" Value="{Binding Options.NoteChunkSeconds}" ToolTip="Shorter passages appear sooner but create more Groq requests. Speech pauses send a passage early." />
+                                                    <Slider ToolTipService.InitialShowDelay="400" ToolTipService.BetweenShowDelay="100" ToolTipService.ShowDuration="20000" ToolTipService.ShowOnDisabled="True" AutomationProperties.Name="Maximum live passage in seconds" Minimum="1.5" Maximum="8" TickFrequency="0.5" IsSnapToTickEnabled="True" Value="{Binding Options.NoteChunkSeconds}" ToolTip="Shorter passages appear sooner but create more recognition jobs or Groq requests. Speech pauses send a passage early." />
                                                     <TextBlock Text="Speech threshold · lower for quiet voices, higher for background noise" Style="{StaticResource BodyText}" />
                                                     <Slider ToolTipService.InitialShowDelay="400" ToolTipService.BetweenShowDelay="100" ToolTipService.ShowDuration="20000" ToolTipService.ShowOnDisabled="True" AutomationProperties.Name="Conversation speech threshold" Minimum="0.002" Maximum="0.05" Value="{Binding Options.NoteSpeechThreshold}" ToolTip="Lower this if quiet voices are missed. Raise it if background noise is being transcribed." />
                                                     <TextBlock Text="Room speaker matching · lower if one voice gets several labels, higher if different voices merge" Style="{StaticResource BodyText}" />
@@ -295,7 +508,8 @@
                                                     </ComboBox>
                                                     <CheckBox Content="Stream Mode" AutomationProperties.Name="Stream Mode" IsChecked="{Binding Settings.StreamModeEnabled, UpdateSourceTrigger=PropertyChanged}" ToolTip="Show recognized words as you speak in any listening mode. The clipboard keeps the full current dictation. Changes apply to the next recording." />
                                                     <TextBlock Text="Show words as you speak in any listening mode. The clipboard keeps the full current dictation. Applies when the next recording starts." Style="{StaticResource BodyText}" Margin="0,0,0,4" />
-                                                    <TextBlock Text="Uses more Groq requests and audio allowance. Stream Mode types directly; spoken actions, spoken punctuation commands and Tone Re-write are bypassed." Style="{StaticResource BodyText}" Margin="0,0,0,8" />
+                                                    <TextBlock Text="Uses more processing; with Groq this also uses more requests and audio allowance. Stream Mode types directly; spoken actions, spoken punctuation commands and Tone Re-write are bypassed." Style="{StaticResource BodyText}" Margin="0,0,0,8" />
+                                                    <StackPanel Visibility="{Binding IsAutoCaptureMode, Converter={StaticResource BooleanVisibility}}">
                                                     <StackPanel Orientation="Horizontal">
                                                         <TextBlock Text="SmartListen Threshold" Style="{StaticResource FieldLabel}" />
                                                         <local:HelpButton Style="{StaticResource HeaderHelpIcon}" HelpText="SmartListen Threshold&#10;- Meter shows current microphone level.&#10;- Slider sets the trigger threshold from 0% to 100%.&#10;- Raise it if small noises start recording; lower it if speech is missed." />
@@ -317,41 +531,30 @@
                                                         <local:HelpButton Style="{StaticResource HeaderHelpIcon}" HelpText="Silence Before Stop&#10;- How long SmartListen waits after you stop speaking.&#10;- Lower values finish faster.&#10;- Higher values allow longer pauses mid-sentence." />
                                                     </StackPanel>
                                                     <TextBox AutomationProperties.Name="Silence before stop in milliseconds" Text="{Binding Settings.AutoCaptureSilenceMs, UpdateSourceTrigger=PropertyChanged}" ToolTip="How long SmartListen waits after speech stops before finishing. A longer delay allows pauses within a sentence. Enter milliseconds, for example 1200." />
-                                                    <CheckBox Content="SmartListen Listening Enabled" IsChecked="{Binding Settings.AutoCaptureListeningEnabled}" ToolTip="Turns SmartListen's always-listening state on or off. This can also be toggled from the tray menu or the SmartListen listening shortcut." />
-                                                    <StackPanel Orientation="Horizontal">
-                                                        <TextBlock Text="SmartListen Media Handling" Style="{StaticResource FieldLabel}" />
-                                                        <local:HelpButton Style="{StaticResource HeaderHelpIcon}" HelpText="SmartListen Media Handling&#10;- Do Nothing: leave system audio alone.&#10;- Mute System Output: mute while listening, then restore the previous mute state.&#10;- Pause or Resume Media: sends the Windows play/pause key when listening turns on and again when it turns off." />
+                                                    <CheckBox Content="SmartListen Listening Enabled" IsChecked="{Binding Settings.AutoCaptureListeningEnabled}" ToolTip="Turns SmartListen's always-listening state on or off. The single listening shortcut also toggles SmartListen on and off." />
                                                     </StackPanel>
-                                                    <ComboBox AutomationProperties.Name="SmartListen media handling" SelectedValue="{Binding Settings.AutoCaptureMediaBehavior}" SelectedValuePath="Tag" ToolTip="Choose whether SmartListen leaves audio alone, mutes output, or sends play/pause when listening changes. Previous mute state is restored.">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Text="Media Handling" Style="{StaticResource FieldLabel}" />
+                                                        <local:HelpButton Style="{StaticResource HeaderHelpIcon}" HelpText="Media Handling&#10;- Do Nothing: leave system audio alone.&#10;- Mute System Output: mute during hotkey dictation, then restore the previous mute state.&#10;- Pause Media: pauses playing media for a hotkey session and resumes only what Wyspa paused. Settings tests do not change playback." />
+                                                    </StackPanel>
+                                                    <ComboBox AutomationProperties.Name="Media handling" SelectedValue="{Binding Settings.AutoCaptureMediaBehavior}" SelectedValuePath="Tag" ToolTip="Only the listening hotkey applies media handling. Mute restores the prior state; Pause Media resumes only sessions Wyspa paused. Settings and practice recordings leave playback alone.">
                                                         <ComboBoxItem Content="Do Nothing" Tag="{x:Static models:AutoCaptureMediaBehavior.None}" />
                                                         <ComboBoxItem Content="Mute System Output" Tag="{x:Static models:AutoCaptureMediaBehavior.MuteSystemOutput}" />
-                                                        <ComboBoxItem Content="Pause or Resume Media" Tag="{x:Static models:AutoCaptureMediaBehavior.TogglePlayPause}" />
+                                                        <ComboBoxItem Content="Pause Media" Tag="{x:Static models:AutoCaptureMediaBehavior.TogglePlayPause}" />
                                                     </ComboBox>
                                                     <StackPanel Orientation="Horizontal">
-                                                        <TextBlock Text="Current Shortcut" Style="{StaticResource FieldLabel}" />
-                                                        <local:HelpButton Style="{StaticResource HeaderHelpIcon}" HelpText="Current Shortcut&#10;- Click the box and press the shortcut.&#10;- Save Hotkey finishes recording it.&#10;- F13-F24 macro keys can be used without modifiers." />
+                                                        <TextBlock Text="{Binding HotkeyTitle}" Style="{StaticResource FieldLabel}" />
+                                                        <local:HelpButton Style="{StaticResource HeaderHelpIcon}" HelpText="Listening Shortcut&#10;- Click the box and press the shortcut.&#10;- Save Hotkey finishes recording it.&#10;- F13-F24 macro keys can be used without modifiers." />
                                                     </StackPanel>
                                                     <Grid>
                                                         <Grid.ColumnDefinitions>
                                                             <ColumnDefinition Width="*" />
                                                             <ColumnDefinition Width="Auto" />
                                                         </Grid.ColumnDefinitions>
-                                                        <TextBox AutomationProperties.Name="Dictation shortcut" x:Name="HotkeyRecorderBox" Text="{Binding HotkeyText, Mode=OneWay}" IsReadOnly="True" GotKeyboardFocus="HotkeyRecorderBox_OnGotKeyboardFocus" ToolTip="Click here and press your desired shortcut, then choose Save Hotkey. F13–F24 can be used without modifiers." />
+                                                        <TextBox AutomationProperties.Name="Listening shortcut" x:Name="HotkeyRecorderBox" Text="{Binding HotkeyText, Mode=OneWay}" IsReadOnly="True" GotKeyboardFocus="HotkeyRecorderBox_OnGotKeyboardFocus" LostKeyboardFocus="HotkeyRecorderBox_OnLostKeyboardFocus" ToolTip="Click here and press your desired shortcut, then choose Save Hotkey. F13–F24 can be used without modifiers." />
                                                         <Button Grid.Column="1" Style="{StaticResource PrimaryButton}" Click="SaveHotkeyButton_OnClick" Margin="7,2,0,5" Content="Save Hotkey" ToolTip="Save and register the shortcut shown beside this button. Wyspa reports shortcuts already in use." />
                                                     </Grid>
-                                                    <StackPanel Orientation="Horizontal">
-                                                        <TextBlock Text="SmartListen Listening Shortcut" Style="{StaticResource FieldLabel}" />
-                                                        <local:HelpButton Style="{StaticResource HeaderHelpIcon}" HelpText="SmartListen Listening Shortcut&#10;- Toggles SmartListen listening on or off.&#10;- Gives tone and overlay feedback when changed.&#10;- Only applies to SmartListen mode." />
-                                                    </StackPanel>
-                                                    <Grid>
-                                                        <Grid.ColumnDefinitions>
-                                                            <ColumnDefinition Width="*" />
-                                                            <ColumnDefinition Width="Auto" />
-                                                        </Grid.ColumnDefinitions>
-                                                        <TextBox AutomationProperties.Name="SmartListen listening shortcut" x:Name="AutoCaptureHotkeyRecorderBox" Text="{Binding AutoCaptureHotkeyText, Mode=OneWay}" IsReadOnly="True" GotKeyboardFocus="AutoCaptureHotkeyRecorderBox_OnGotKeyboardFocus" ToolTip="Click here and press a shortcut to toggle SmartListen listening, then choose Save Hotkey. Applies only to SmartListen mode." />
-                                                        <Button Grid.Column="1" Style="{StaticResource PrimaryButton}" Click="SaveAutoCaptureHotkeyButton_OnClick" Margin="7,2,0,5" Content="Save Hotkey" ToolTip="Save and register the shortcut shown beside this button. Wyspa reports shortcuts already in use." />
-                                                    </Grid>
-                                                    <TextBlock Text="Click a shortcut field, press your shortcut, then save it. F13-F24 macro keys can be used without modifiers." Style="{StaticResource BodyText}" />
+                                                    <TextBlock Text="One shortcut follows the active mode: press to start/stop Toggle, hold for Hold to Talk, or press to turn SmartListen on/off. F13-F24 macro keys can be used without modifiers." Style="{StaticResource BodyText}" />
                                                 </StackPanel>
                                             </Border>
                                         </StackPanel>
@@ -467,7 +670,7 @@
                                 </Expander>
                                 <Expander Header="Experimental" Tag="Stream fix, wake voice, tone re-write, and spoken actions" Uid="&#xE9D9;" Style="{StaticResource SettingsGroup}" IsExpanded="False" AutomationProperties.Name="Experimental settings">
                                     <StackPanel Margin="4,8,4,4">
-                                        <TextBlock Text="Optional features to try. Models use your Groq connection; refresh the list in Groq." Style="{StaticResource BodyText}" Margin="0,0,0,10" />
+                                        <TextBlock Text="Optional features to try. Wake phrase detection runs locally; text rewriting and AI actions use your Groq connection." Style="{StaticResource BodyText}" Margin="0,0,0,10" />
                                         <Border Style="{StaticResource Card}" Margin="0,0,0,12">
                                             <StackPanel>
                                                 <TextBlock Text="Stream Fix" Foreground="{DynamicResource InkBrush}" FontWeight="SemiBold" />
@@ -481,35 +684,25 @@
                                             <StackPanel>
                                                 <StackPanel Orientation="Horizontal">
                                                     <TextBlock Text="Wake Voice" Foreground="{DynamicResource InkBrush}" FontWeight="SemiBold" />
-                                                    <local:HelpButton Style="{StaticResource HeaderHelpIcon}" HelpText="Wake Voice&#10;- Optional local voice gate for SmartListen.&#10;- Requires a trained Hey Whisper style phrase.&#10;- Disabled settings below do nothing until this is turned on." />
+                                                    <local:HelpButton Style="{StaticResource HeaderHelpIcon}" HelpText="Wake Voice&#10;- Local English keyword detector for SmartListen.&#10;- Use the personal wake wizard to learn your pronunciation and adjust matching automatically.&#10;- Say the phrase, wait for the ready tone, then dictate." />
                                                 </StackPanel>
-                                                <CheckBox Content="Require Local Hey Whisper Match" IsChecked="{Binding Settings.AutoCaptureWakeVoiceEnabled}" ToolTip="When enabled, SmartListen waits for a local wake voice match before it records dictated text." />
-                                                <StackPanel IsEnabled="{Binding IsWakeVoiceSettingsEnabled}">
-                                                    <Grid Margin="0,0,0,2">
-                                                        <Grid.ColumnDefinitions>
-                                                            <ColumnDefinition Width="*" />
-                                                            <ColumnDefinition Width="Auto" />
-                                                        </Grid.ColumnDefinitions>
-                                                        <StackPanel Orientation="Horizontal">
-                                                            <TextBlock Text="Wake Match Strictness" Style="{StaticResource FieldLabel}" />
-                                                            <local:HelpButton Style="{StaticResource HeaderHelpIcon}" HelpText="Wake Match Strictness&#10;- 0% accepts looser matches.&#10;- 100% requires a closer voice match.&#10;- Train first, then adjust only if it misses or triggers too easily." />
-                                                        </StackPanel>
-                                                        <TextBlock Grid.Column="1" Style="{StaticResource BodyText}" Text="{Binding Value, ElementName=WakeVoiceSensitivitySlider, StringFormat={}{0:P0}}" />
-                                                    </Grid>
-                                                    <Slider ToolTipService.InitialShowDelay="400" ToolTipService.BetweenShowDelay="100" ToolTipService.ShowDuration="20000" ToolTipService.ShowOnDisabled="True" AutomationProperties.Name="Wake match strictness" x:Name="WakeVoiceSensitivitySlider" Minimum="0" Maximum="1" TickFrequency="0.01" Value="{Binding Settings.AutoCaptureWakeVoiceSensitivity, UpdateSourceTrigger=PropertyChanged}" ToolTip="Higher values require a closer match to your trained wake voice. Train first, then adjust if it misses or triggers too easily." />
-                                                    <StackPanel Orientation="Horizontal">
-                                                        <TextBlock Text="{Binding WakeTrainingProgressText}" Style="{StaticResource FieldLabel}" />
-                                                        <local:HelpButton Style="{StaticResource HeaderHelpIcon}" HelpText="Wake Voice Training&#10;- Record each displayed phrase in your normal voice.&#10;- Include the wake phrase and sample sentences.&#10;- Reset Training clears the local voice profile." />
+                                                <TextBlock Text="An English keyword detector checks the actual phrase locally. It prepares about 39 MB of local wake, speech-detection and verification models once; existing matching downloads are reused. In SmartListen, say the phrase, wait for the ready tone, then dictate; your silence setting stops recording and the detector waits for the next phrase. The wake phrase is excluded from dictation pre-roll." Style="{StaticResource BodyText}" Margin="0,6,0,8" />
+                                                <TextBlock Text="Wake phrases are available only in SmartListen mode." Style="{StaticResource BodyText}" Margin="0,0,0,8" />
+                                                <StackPanel>
+                                                    <StackPanel DataContext="{Binding WakeCalibration}" IsEnabled="{Binding IsSmartListen}">
+                                                        <CheckBox Content="Enable wake phrases" IsChecked="{Binding Enabled}" IsEnabled="{Binding CanEdit}" AutomationProperties.Name="Enable wake phrases" ToolTip="In SmartListen, wait for this phrase before dictation starts. Enabling also starts hands-free monitoring; practice is optional." />
+                                                        <TextBlock Text="Wake phrase" Style="{StaticResource FieldLabel}" />
+                                                        <TextBox Text="{Binding Phrase, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanEdit}" MaxLength="60" AutomationProperties.Name="Wake phrase" ToolTip="Use two to five English words. Practice or enabling automatically saves the phrase." />
+                                                        <TextBlock Text="Personal wake setup" Style="{StaticResource FieldLabel}" Margin="0,12,0,4" />
+                                                        <TextBlock Text="A short wizard learns how you naturally say your phrase and optimizes matching strictness. Speak in your own voice; Wyspa adapts to you." Style="{StaticResource BodyText}" Margin="0,0,0,8" />
+                                                        <Button Content="{Binding WizardLabel}" Click="OpenWakeSetup_OnClick" IsEnabled="{Binding CanEdit}" Style="{StaticResource PrimaryButton}" HorizontalAlignment="Left" AutomationProperties.Name="Open wake setup wizard" ToolTip="Open the personal wake wizard. Recording begins only when you choose Record sample." />
+                                                        <TextBlock Text="{Binding WizardOpenError}" Style="{StaticResource BodyText}" AutomationProperties.LiveSetting="Polite" />
+                                                        <TextBlock Text="{Binding TuningSummary}" Style="{StaticResource BodyText}" Margin="0,8,0,0" />
+                                                        <Border Margin="0,8,0,0" Padding="8" CornerRadius="4">
+                                                            <Border.Style><Style TargetType="Border"><Setter Property="Background" Value="{DynamicResource PanelAltBrush}" /><Style.Triggers><DataTrigger Binding="{Binding IsAwake}" Value="True"><Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" /><Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" /><Setter Property="BorderThickness" Value="1" /></DataTrigger></Style.Triggers></Style></Border.Style>
+                                                            <TextBlock Text="{Binding Runtime}" Style="{StaticResource BodyText}" AutomationProperties.LiveSetting="Polite" />
+                                                        </Border>
                                                     </StackPanel>
-                                                    <Border Background="{DynamicResource PanelAltBrush}" BorderBrush="{DynamicResource LineBrush}" BorderThickness="1" CornerRadius="6" Padding="8" Margin="0,0,0,5">
-                                                        <TextBlock Text="{Binding WakeTrainingPromptText}" Foreground="{DynamicResource InkBrush}" TextWrapping="Wrap" FontWeight="SemiBold" />
-                                                    </Border>
-                                                    <WrapPanel Margin="0,2,0,3">
-                                                        <Button Style="{StaticResource PrimaryButton}" Command="{Binding RecordWakeVoiceCommand}" Content="{Binding WakeVoiceButtonText}" ToolTip="Record the displayed training phrase in your normal voice. Stop the sample when finished and follow the next prompt." />
-                                                        <Button Command="{Binding ResetWakeVoiceCommand}" Content="Reset Training" ToolTip="Clear the saved local wake-voice profile so you can train it again." />
-                                                    </WrapPanel>
-                                                    <TextBlock Text="{Binding WakeTrainingText}" Style="{StaticResource BodyText}" Margin="0,0,0,3" />
-                                                    <TextBlock Text="{Binding WakeVoiceStatus}" Style="{StaticResource BodyText}" Margin="0,0,0,5" />
                                                     <StackPanel Orientation="Horizontal">
                                                         <TextBlock Text="Wake Accepted Tone" Style="{StaticResource FieldLabel}" />
                                                         <local:HelpButton Style="{StaticResource HeaderHelpIcon}" HelpText="Wake Accepted Tone&#10;- Plays when wake voice successfully starts listening.&#10;- Use Default restores Wyspa's built-in short tone.&#10;- Choose WAV lets you use your own local sound." />

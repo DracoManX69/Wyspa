@@ -29,7 +29,7 @@ public sealed class JsonSettingsService : ISettingsService
         {
             if (!File.Exists(_settingsPath))
             {
-                return new AppSettings();
+                return new AppSettings { UseLocalTranscription = true, LocalModelId = ZipformerModel.Id, StreamModeEnabled = true };
             }
 
             await using var stream = File.OpenRead(_settingsPath);

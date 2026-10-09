@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <TargetFramework>net10.0-windows10.0.17763.0</TargetFramework>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
@@ -16,13 +16,24 @@
     <ProjectReference Include="..\Wyspa.Infrastructure\Wyspa.Infrastructure.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="Assets\BenchmarkSample.wav;Assets\BenchmarkSample-NOTICE.txt;Assets\AlternativeModels-NOTICE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <Content Include="Assets\Whisper*-LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
     <Content Include="Assets\Octicons-LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <Content Include="Tools\LocalDefault\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
     <Content Include="Tools\Flac\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
-    <Content Include="Tools\Video\**\*;Tools\Speakers\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <Content Include="Tools\Video\**\*;Tools\Speakers\**\*" Exclude="Tools\Video\deno.exe;Tools\Video\ffplay.exe;Tools\Speakers\*.onnx" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
     <Resource Include="Assets\AppIcon.ico" />
     <Resource Include="Assets\AppLogo.png" />
     <Resource Include="Assets\WakeTone.wav" />
     <Resource Include="Assets\AutoCaptureOn.wav" />
     <Resource Include="Assets\AutoCaptureOff.wav" />
   </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Whisper.net.Runtime" Version="1.9.1" />
+    <PackageReference Include="Whisper.net.Runtime.NoAvx" Version="1.9.1" />
+    <PackageReference Include="Whisper.net.Runtime.Vulkan" Version="1.9.1" />
+  </ItemGroup>
+  <Target Name="VerifyBundledLocalModel" BeforeTargets="PrepareForPublish">
+    <Error Condition="!Exists('Tools/LocalDefault/encoder-epoch-99-avg-1.int8.onnx') Or !Exists('Tools/LocalDefault/decoder-epoch-99-avg-1.onnx') Or !Exists('Tools/LocalDefault/joiner-epoch-99-avg-1.int8.onnx') Or !Exists('Tools/LocalDefault/tokens.txt')" Text="Prepare the bundled model with scripts/prepare-local-model.ps1 before publishing." />
+  </Target>
 </Project>
