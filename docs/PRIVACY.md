@@ -142,7 +142,7 @@ Audio Files uses local lossless compression where applicable before uploading to
 
 File transcription uses the saved transcription model, language, and custom vocabulary prompt. It does not send transcripts to writing cleanup or intent models. Temporary compressed/split files are removed after success, failure, or cancellation, regardless of the microphone debug-retention setting. A crash or forced termination may leave files under `%TEMP%\Wyspa\FileTranscription`.
 
-File transcripts are held in memory until cleared or the app exits. Copy and Save are explicit local actions. Cancellation stops future uploads but cannot recall audio already sent to Groq.
+Completed file transcriptions automatically save a timestamped CSV in `%AppData%\Wyspa\FileTranscripts`. Each row contains a speech segment's start/end time and text. These files are not separately encrypted and remain until you delete them; clearing the queue or exiting Wyspa does not delete CSV exports. Open CSV opens the local file in your default associated app, and Save CSV lets you choose another local destination. Partial or failed transcriptions do not create a completed CSV; their available transcript text stays in memory until cleared or the app exits unless explicitly copied or saved. Cancellation stops future uploads but cannot recall audio already sent to Groq. In local mode, recognition stays on this computer and uses the same local CSV storage.
 
 
 ## Conversation notes and YouTube (0.7.0)

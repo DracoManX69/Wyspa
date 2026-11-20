@@ -45,6 +45,7 @@ public sealed class AudioFilePreparationTests : IDisposable
         {
             generated = prepared.Paths.ToArray();
             Assert.True(generated.Length > 1);
+            Assert.Equal(new[] { 0d, 5_000_000d / 48000 }, prepared.PartStartSeconds);
             using var decoded = new MemoryStream();
             foreach (var part in generated)
             {

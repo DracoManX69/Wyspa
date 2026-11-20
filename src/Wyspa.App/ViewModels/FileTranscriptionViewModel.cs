@@ -12,13 +12,26 @@ public sealed class AudioFileItem(string path) : ViewModelBase
     private string _status = "Ready";
     private string _details = "";
     private string _transcript = "";
+    private bool _isComplete;
+    private IReadOnlyList<TranscriptSegment> _segments = [];
+    private string? _csvPath;
     public string Path { get; } = path;
     public string Name => System.IO.Path.GetFileName(Path);
-    public bool IsComplete { get; set; }
+    public bool IsComplete { get => _isComplete; set { SetProperty(ref _isComplete, value); OnPropertyChanged(nameof(CanSaveCsv)); } }
     public string Status { get => _status; set => SetProperty(ref _status, value); }
     public string Details { get => _details; set => SetProperty(ref _details, value); }
-    public string Transcript { get => _transcript; set { SetProperty(ref _transcript, value); OnPropertyChanged(nameof(HasTranscript)); } }
+    public string Transcript { get => _transcript; set { SetProperty(ref _transcript, value); OnPropertyChanged(nameof(HasTranscript)); OnPropertyChanged(nameof(TimestampedTranscript)); } }
     public bool HasTranscript => !string.IsNullOrWhiteSpace(Transcript);
+    public IReadOnlyList<TranscriptSegment> Segments
+    {
+        get => _segments;
+        set { SetProperty(ref _segments, value); OnPropertyChanged(nameof(TimestampedTranscript)); }
+    }
+    public string TimestampedTranscript => FileTranscriptExport.ToText(Segments);
+    public string? CsvPath { get => _csvPath; set { SetProperty(ref _csvPath, value); OnPropertyChanged(nameof(HasCsv)); OnPropertyChanged(nameof(CsvMessage)); } }
+    public bool HasCsv => !string.IsNullOrEmpty(CsvPath);
+    public bool CanSaveCsv => IsComplete;
+    public string CsvMessage => HasCsv ? "CSV saved: " + CsvPath : "A CSV with start, end and text columns is saved automatically after each file completes.";
 }
 
 public sealed class FileTranscriptionViewModel : ViewModelBase
@@ -27,6 +40,7 @@ public sealed class FileTranscriptionViewModel : ViewModelBase
     private readonly IGroqTranscriptionClient _client;
     private readonly ISecretStore _secrets;
     private readonly Func<AppSettings> _settings;
+    private readonly FileTranscriptCsvStore _csvStore;
     private CancellationTokenSource? _cancellation;
     private Task? _activeTask;
     private AudioFileItem? _selectedFile;
@@ -34,12 +48,13 @@ public sealed class FileTranscriptionViewModel : ViewModelBase
     private string _status = "Choose audio files from your PC. Processing starts only when you click Transcribe.";
 
     public FileTranscriptionViewModel(IAudioFilePreparationService preparation, IGroqTranscriptionClient client,
-        ISecretStore secrets, Func<AppSettings> settings)
+        ISecretStore secrets, Func<AppSettings> settings, FileTranscriptCsvStore? csvStore = null)
     {
         _preparation = preparation;
         _client = client;
         _secrets = secrets;
         _settings = settings;
+        _csvStore = csvStore ?? new FileTranscriptCsvStore();
         TranscribeCommand = new AsyncRelayCommand(StartAsync, () => !IsBusy && Files.Any(f => !f.IsComplete));
         CancelCommand = new AsyncRelayCommand(() => { Cancel(); return Task.CompletedTask; }, () => IsBusy);
         ClearCommand = new AsyncRelayCommand(() => { Files.Clear(); SelectedFile = null; Status = "Choose audio files to begin."; Refresh(); return Task.CompletedTask; }, () => !IsBusy && Files.Count > 0);
@@ -98,7 +113,7 @@ public sealed class FileTranscriptionViewModel : ViewModelBase
                 Status = "Add and test your API key in Settings → Groq first.";
                 return;
             }
-            var options = new TranscriptionOptions(settings.ModelId, settings.Language, settings.CustomPrompt, UseLocal: settings.UseLocalTranscription, LocalModelId: settings.LocalModelId);
+            var options = new TranscriptionOptions(settings.ModelId, settings.Language, settings.CustomPrompt, ResponseFormat: "verbose_json", UseLocal: settings.UseLocalTranscription, LocalModelId: settings.LocalModelId);
             var pending = Files.Where(f => !f.IsComplete).ToArray();
             var failed = 0;
             for (var index = 0; index < pending.Length; index++)
@@ -108,6 +123,9 @@ public sealed class FileTranscriptionViewModel : ViewModelBase
                 var item = current;
                 SelectedFile = item;
                 item.Status = "Preparing…";
+                item.Transcript = "";
+                item.Segments = [];
+                item.CsvPath = null;
                 Status = $"File {index + 1} of {pending.Length}: {item.Name}";
                 var preparing = true;
                 try
@@ -121,17 +139,32 @@ public sealed class FileTranscriptionViewModel : ViewModelBase
                     var saved = Math.Max(0, 100d * (1 - (double)prepared.UploadBytes / prepared.OriginalBytes));
                     item.Details = settings.UseLocalTranscription ? "Processed on this computer · no upload" : $"{prepared.OriginalBytes / 1_000_000d:0.##} MB → {prepared.UploadBytes / 1_000_000d:0.##} MB upload ({saved:0}% smaller). {prepared.Description}";
                     var transcripts = new List<string>();
+                    var segments = new List<TranscriptSegment>();
                     for (var part = 0; part < prepared.Paths.Count; part++)
                     {
                         token.ThrowIfCancellationRequested();
                         item.Status = $"Transcribing part {part + 1} of {prepared.Paths.Count}…";
-                        var text = await _client.TranscribeAsync(key, prepared.Paths[part], options, token);
-                        transcripts.Add(text);
+                        var response = await _client.TranscribeAsync(key, prepared.Paths[part], options, token);
+                        var result = FileTranscriptExport.Parse(response);
+                        var offset = prepared.PartStartSeconds[part];
+                        segments.AddRange(result.Segments.Select(s => s with { Start = s.Start + offset, End = s.End + offset }));
+                        transcripts.Add(result.Text);
                         item.Transcript = string.Join(Environment.NewLine + Environment.NewLine, transcripts.Where(t => !string.IsNullOrWhiteSpace(t)));
+                        item.Segments = segments.ToArray();
                     }
                     token.ThrowIfCancellationRequested();
+                    item.Status = "Saving CSV…";
+                    try
+                    {
+                        item.CsvPath = await _csvStore.SaveAsync(item.Path, item.Segments, token);
+                        item.Status = string.IsNullOrWhiteSpace(item.Transcript) ? "Complete — no speech detected; empty CSV saved" : "Complete — CSV saved";
+                    }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                    {
+                        failed++;
+                        item.Status = "Transcribed — CSV could not be saved. Use Save CSV… to choose a writable folder.";
+                    }
                     item.IsComplete = true;
-                    item.Status = string.IsNullOrWhiteSpace(item.Transcript) ? "Complete — no speech detected" : "Complete";
                 }
                 catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
                 catch (Exception ex)
@@ -143,8 +176,8 @@ public sealed class FileTranscriptionViewModel : ViewModelBase
                 }
                 finally { preparing = false; }
             }
-            Status = failed == 0 ? "Transcription complete. Select a file to copy or save its transcript." :
-                $"Finished with {failed} failed file(s). Completed files will be skipped if you retry. Partial results remain available.";
+            Status = failed == 0 ? "Transcription complete. Timestamped CSV files saved. Select a file to open its CSV or save a copy." :
+                $"Finished with {failed} file(s) needing attention. Check each file’s status. Completed transcriptions will be skipped if you retry; partial results remain available.";
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {

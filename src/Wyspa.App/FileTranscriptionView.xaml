@@ -7,7 +7,7 @@
     <ScrollViewer Padding="{StaticResource PagePadding}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
         <StackPanel MaxWidth="1040" HorizontalAlignment="Stretch">
             <TextBlock Text="Audio Files" Style="{StaticResource PageTitle}" />
-            <TextBlock Text="Transcribe local recordings with your saved Groq connection." Style="{StaticResource BodyText}" />
+            <TextBlock Text="Transcribe recordings with your selected provider and automatically save timestamped CSV files." Style="{StaticResource BodyText}" />
             <Border Style="{StaticResource Card}" Margin="0,8,0,7">
                 <StackPanel>
                     <TextBlock Text="Lossless preparation on your PC. Original files stay untouched." Style="{StaticResource BodyText}"
@@ -37,13 +37,16 @@
                 </ListBox.ItemTemplate>
             </ListBox>
             <TextBlock Text="{Binding SelectedFile.Details}" Style="{StaticResource BodyText}" FontSize="11" Margin="0,5,0,5" />
-            <TextBlock Text="Transcript" Style="{StaticResource FieldLabel}" />
-            <TextBox Text="{Binding SelectedFile.Transcript, Mode=OneWay}" IsReadOnly="True" Height="180"
+            <TextBlock Text="Timestamped transcript" Style="{StaticResource FieldLabel}" />
+            <TextBox Text="{Binding SelectedFile.TimestampedTranscript, Mode=OneWay}" IsReadOnly="True" Height="180"
                      TextWrapping="Wrap" AcceptsReturn="True" VerticalScrollBarVisibility="Auto"
-                     AutomationProperties.Name="File transcript" ToolTip="Read or select the recognized text. Copy transcript copies it all; Save text exports a text file." />
+                     AutomationProperties.Name="File transcript" ToolTip="Each speech segment shows its start and end time in the original recording. Timestamp precision depends on the selected model." />
+            <TextBlock Text="{Binding SelectedFile.CsvMessage, TargetNullValue='A timestamped CSV is saved automatically after each file completes.'}" Style="{StaticResource BodyText}" FontSize="12" Margin="0,6,0,0" TextWrapping="Wrap" />
             <WrapPanel>
-                <Button Content="Copy transcript" Click="CopyTranscript_OnClick" IsEnabled="{Binding SelectedFile.HasTranscript, FallbackValue=False, TargetNullValue=False}" ToolTip="Copy the selected file’s full transcript to the clipboard." />
-                <Button Content="Save text…" Click="SaveTranscript_OnClick" IsEnabled="{Binding SelectedFile.HasTranscript, FallbackValue=False, TargetNullValue=False}" ToolTip="Save the selected transcript as a text file at a location you choose." />
+                <Button Content="Open CSV" Click="OpenCsv_OnClick" IsEnabled="{Binding SelectedFile.HasCsv, FallbackValue=False, TargetNullValue=False}" ToolTip="Open the automatically saved CSV in your default spreadsheet app." />
+                <Button Content="Save CSV…" Click="SaveCsv_OnClick" IsEnabled="{Binding SelectedFile.CanSaveCsv, FallbackValue=False, TargetNullValue=False}" ToolTip="Save a copy with one row per speech segment and start, end and text columns." />
+                <Button Content="Copy transcript" Click="CopyTranscript_OnClick" IsEnabled="{Binding SelectedFile.HasTranscript, FallbackValue=False, TargetNullValue=False}" ToolTip="Copy the selected file’s timestamped transcript to the clipboard." />
+                <Button Content="Save text…" Click="SaveTranscript_OnClick" IsEnabled="{Binding SelectedFile.HasTranscript, FallbackValue=False, TargetNullValue=False}" ToolTip="Save the selected timestamped transcript as a text file at a location you choose." />
             </WrapPanel>
         </StackPanel>
     </ScrollViewer>

@@ -74,10 +74,11 @@ public sealed class AudioFilePreparationService(string encoderPath) : IAudioFile
             }
 
             progress?.Report("Splitting lossless audio into upload-sized parts…");
-            var (totalSamples, bytesPerFrame) = ReadFlacInfo(compressed);
+            var (totalSamples, bytesPerFrame, sampleRate) = ReadFlacInfo(compressed);
             // Bound each part by uncompressed size, including incompressible audio.
             var samplesPerPart = 20_000_000L / bytesPerFrame;
             var paths = new List<string>();
+            var offsets = new List<double>();
             for (long start = 0; start < totalSamples; start += samplesPerPart)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -89,11 +90,12 @@ public sealed class AudioFilePreparationService(string encoderPath) : IAudioFile
                     throw new InvalidOperationException("The audio could not be split. No incomplete file was uploaded.");
                 CheckUploadSize(new FileInfo(part).Length);
                 paths.Add(part);
+                offsets.Add((double)start / sampleRate);
             }
 
             if (compressed != path) File.Delete(compressed);
             return new PreparedAudio(paths, originalBytes, paths.Sum(p => new FileInfo(p).Length),
-                $"Lossless FLAC • {paths.Count} parts • all audio preserved.", temporaryDirectory);
+                $"Lossless FLAC • {paths.Count} parts • all audio preserved.", temporaryDirectory, offsets);
         }
         catch
         {
@@ -135,7 +137,7 @@ public sealed class AudioFilePreparationService(string encoderPath) : IAudioFile
         }
     }
 
-    private static (long Samples, int BytesPerFrame) ReadFlacInfo(string path)
+    private static (long Samples, int BytesPerFrame, int SampleRate) ReadFlacInfo(string path)
     {
         using var stream = File.OpenRead(path);
         Span<byte> header = stackalloc byte[42];
@@ -144,10 +146,11 @@ public sealed class AudioFilePreparationService(string encoderPath) : IAudioFile
             throw new InvalidOperationException("The FLAC file has an invalid audio header.");
         var packed = BinaryPrimitives.ReadUInt64BigEndian(header.Slice(18, 8));
         var samples = (long)(packed & 0xfffffffffUL);
+        var sampleRate = (int)(packed >> 44);
         var channels = (int)((packed >> 41) & 7) + 1;
         var bits = (int)((packed >> 36) & 31) + 1;
-        if (samples == 0) throw new InvalidOperationException("This FLAC file has no known length. Export it again before transcribing.");
-        return (samples, channels * ((bits + 7) / 8));
+        if (samples == 0 || sampleRate == 0) throw new InvalidOperationException("This FLAC file has no known length or sample rate. Export it again before transcribing.");
+        return (samples, channels * ((bits + 7) / 8), sampleRate);
     }
 
     private static void CheckUploadSize(long bytes)

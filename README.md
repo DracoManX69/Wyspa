@@ -8,6 +8,10 @@ Fresh installations work locally with an included small English model, without a
 
 Wyspa was written effectively entirely by Codex with some cleaver interfacing with the app to get it to work pretty well. This vibe code disclosure is basically the only thing human authored. Codex did the rest of this repo too :)
 
+## New in v0.9.6
+
+**Timestamped audio-file exports:** Audio Files now shows start/end timestamps for each speech segment and automatically saves a CSV with `start,end,text` columns after every completed recording. **Open CSV** opens the saved file; **Save CSV…** saves a copy wherever you choose. Times stay relative to the original recording across split uploads. Completed CSVs persist in `%AppData%\Wyspa\FileTranscripts` until deleted. [Release notes](docs/releases/v0.9.6.md).
+
 ## New in v0.9.5
 
 Fresh installs include **Zipformer English 20M (45.2 MB)** and start with local Stream Mode, with no account or required training. **Settings → Local models → Model Manager** offers 25 choices: the included model, 15 Whisper variants, Parakeet v2/v3 and Redux, Moonshine Tiny/Base, SenseVoice, Faster-Whisper Tiny/Base English and a larger streaming Zipformer. Model weights are under 1.5 GB; optional shared runtimes/GPU libraries have separate download sizes. Downloads are verified and have per-model progress, install/remove and batch actions.
@@ -248,15 +252,19 @@ Wyspa is original software and does not copy Wispr Flow branding, layouts, copy,
 2. Open **Audio Files** and click **Choose files…**. Select one or more recordings from your PC.
 3. Click **Transcribe**. Selection alone never uploads anything.
 4. Watch preparation/transcription progress and the original versus uploaded size for each file.
-5. Select a completed file and use **Copy transcript** or **Save text…**.
+5. Each completed file automatically creates a timestamped CSV in `%AppData%\Wyspa\FileTranscripts`. Select a file and use **Open CSV**, **Save CSV…**, **Copy transcript** or **Save text…**.
 
-This uses the same Groq transcription model, language, and vocabulary prompt as dictation. It requests plain text and does not call writing cleanup or command interpretation models, even when those options are enabled for microphone dictation. Files run sequentially; retrying a batch skips completed files. Cancelling keeps completed and partial transcripts available, and stops remaining uploads. Retrying a partial file transcribes that file from the beginning.
+This uses the same selected local/Groq transcription model, language, and vocabulary prompt as dictation. Groq requests include segment timestamps using its [verbose JSON response](https://console.groq.com/docs/speech-to-text). The preview, copied transcript and text export show each speech segment's start and end time relative to the original recording, including across split uploads. Local engines use their available timed words/spans, grouped at pauses and sentence endings; timing precision varies by model and a model returning one coarse span produces one CSV row. Writing cleanup and command interpretation models are bypassed, even when enabled for microphone dictation.
+
+CSV columns are `start,end,text`, with times formatted as `HH:MM:SS.mmm` and one row per speech segment. UTF-8 with a BOM preserves non-English text in spreadsheet apps, and commas, quotes and line breaks are escaped. A silent recording creates a header-only CSV. Each transcription uses a unique filename so earlier exports are preserved. If automatic saving fails, the completed transcript stays available and **Save CSV…** lets you choose a writable folder without transcribing again.
+
+Files run sequentially; retrying a batch skips completed files. Cancelling keeps completed CSVs and any partial transcript in memory, and stops remaining uploads. Partial or failed transcriptions do not create a completed CSV. Retrying a partial file transcribes that file from the beginning, replacing its partial result.
 
 Integer PCM WAV and AIFF are encoded locally as FLAC with verification: decoded samples, sample rate, bit depth, and channels are preserved. There is no downsampling, stereo-to-mono mixing, silence removal, or lossy re-encoding. If the original WAV is smaller, Wyspa uploads the original. Floating-point or other WAV formats that cannot be encoded losslessly are uploaded unchanged if they fit the limit. Corrupt/unsupported audio may still be rejected by Groq.
 
 FLAC, MP3, M4A, OGG, WebM, and MPGA are already compressed and normally uploaded unchanged. PCM/FLAC audio above the 24 MB per-upload safety limit is split into consecutive lossless parts and its transcripts are joined in order. Splitting preserves samples, but transcription at a part boundary can be less accurate because the model sees each part independently. Other compressed files above 24 MB need to be split locally first. Multi-track containers use the provider's first audio track only.
 
-Temporary lossless files are deleted on success, failure, or cancellation. Source files are never changed or deleted. Transcripts stay in memory until cleared or Wyspa exits unless you explicitly save/copy them. A forced process termination or power loss can leave temporary files under `%TEMP%\Wyspa\FileTranscription`.
+Temporary lossless files are deleted on success, failure, or cancellation. Source files are never changed or deleted. Completed CSVs persist in `%AppData%\Wyspa\FileTranscripts` until you delete them; clearing the queue does not delete exports. Partial transcripts stay in memory until cleared or Wyspa exits unless you explicitly save/copy them. A forced process termination or power loss can leave temporary files under `%TEMP%\Wyspa\FileTranscription`.
 
 Lossless compression reduces upload bandwidth, but it does not shorten the recording or reduce duration-based transcription billing. See [Groq speech-to-text documentation](https://console.groq.com/docs/speech-to-text) for provider limits and billing rules.
 

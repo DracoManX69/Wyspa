@@ -1,18 +1,23 @@
 using Wyspa.App.ViewModels;
 using Wyspa.Core.Abstractions;
 using Wyspa.Core.Models;
+using Wyspa.Core.Services;
+using System.Text.Json;
 
 namespace Wyspa.Tests;
 
-public sealed class FileTranscriptionViewModelTests
+public sealed class FileTranscriptionViewModelTests : IDisposable
 {
+    private readonly string _output = Directory.CreateTempSubdirectory("wyspa-file-csv-tests-").FullName;
+    private FileTranscriptCsvStore CsvStore => new(_output);
+    public void Dispose() => Directory.Delete(_output, recursive: true);
     [Fact]
     public async Task TranscribesPartsInOrder_AndSkipsCompletedFilesOnRetry()
     {
         var client = new FakeClient();
         var settings = new AppSettings { ModelId = "whisper-large-v3-turbo", Language = "en", CustomPrompt = "Wyspa", GroqWritingCleanupEnabled = true };
         var preparation = new FakePreparation();
-        var viewModel = new FileTranscriptionViewModel(preparation, client, new FakeSecrets("test-key"), () => settings);
+        var viewModel = new FileTranscriptionViewModel(preparation, client, new FakeSecrets("test-key"), () => settings, CsvStore);
         viewModel.AddFiles(["first.wav", "second.wav", "first.wav"]);
         Assert.Equal(2, viewModel.Files.Count);
         await viewModel.StartAsync();
@@ -20,6 +25,15 @@ public sealed class FileTranscriptionViewModelTests
         Assert.All(viewModel.Files, item => { Assert.True(item.IsComplete); Assert.Equal("part one" + Environment.NewLine + Environment.NewLine + "part two", item.Transcript); });
         Assert.Equal("en", client.Options!.Language);
         Assert.Equal("Wyspa", client.Options.Prompt);
+        Assert.Equal("verbose_json", client.Options.ResponseFormat);
+        Assert.All(viewModel.Files, item =>
+        {
+            Assert.Equal(new[] { 1.25, 31.25 }, item.Segments.Select(s => s.Start));
+            Assert.Contains("[00:00:31.250 – 00:00:32.500] part two", item.TimestampedTranscript);
+            Assert.True(item.HasCsv);
+            Assert.Equal("start,end,text\r\n00:00:01.250,00:00:02.500,\"part one\"\r\n00:00:31.250,00:00:32.500,\"part two\"\r\n", File.ReadAllText(item.CsvPath!));
+        });
+        Assert.Equal(2, Directory.GetFiles(_output, "*.csv").Length);
         await viewModel.StartAsync();
         Assert.Equal(4, client.Calls);
         Assert.All(preparation.Directories, directory => Assert.False(Directory.Exists(directory)));
@@ -30,7 +44,7 @@ public sealed class FileTranscriptionViewModelTests
     {
         var preparation = new FakePreparation();
         var client = new FakeClient { BlockSecondPart = true };
-        var vm = new FileTranscriptionViewModel(preparation, client, new FakeSecrets("test-key"), () => new AppSettings());
+        var vm = new FileTranscriptionViewModel(preparation, client, new FakeSecrets("test-key"), () => new AppSettings(), CsvStore);
         vm.AddFiles(["first.wav", "second.wav"]);
         var task = vm.StartAsync();
         await client.SecondPartStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
@@ -40,8 +54,12 @@ public sealed class FileTranscriptionViewModelTests
         Assert.False(vm.IsBusy);
         Assert.Equal("part one", vm.Files[0].Transcript);
         Assert.False(vm.Files[0].IsComplete);
+        Assert.Single(vm.Files[0].Segments);
+        Assert.Empty(Directory.GetFiles(_output));
         Assert.Equal("Ready", vm.Files[1].Status);
         Assert.All(preparation.Directories, directory => Assert.False(Directory.Exists(directory)));
+        await vm.StartAsync();
+        Assert.All(vm.Files, item => { Assert.True(item.IsComplete); Assert.Equal(2, item.Segments.Count); Assert.True(item.HasCsv); });
     }
 
     [Fact]
@@ -49,7 +67,7 @@ public sealed class FileTranscriptionViewModelTests
     {
         var preparation = new FakePreparation();
         var client = new FakeClient();
-        var vm = new FileTranscriptionViewModel(preparation, client, new FakeSecrets(null), () => new AppSettings());
+        var vm = new FileTranscriptionViewModel(preparation, client, new FakeSecrets(null), () => new AppSettings(), CsvStore);
         vm.AddFiles(["file.wav"]);
         await vm.StartAsync();
         Assert.Empty(preparation.Directories);
@@ -66,13 +84,52 @@ public sealed class FileTranscriptionViewModelTests
         {
             File.WriteAllBytes(path, [1, 2, 3]);
             var prep = new FakePreparation(); var client = new FakeClient();
-            var vm = new FileTranscriptionViewModel(prep, client, new FakeSecrets(null), () => new AppSettings { UseLocalTranscription = true, LocalModelId = "tiny.en" });
+            var vm = new FileTranscriptionViewModel(prep, client, new FakeSecrets(null), () => new AppSettings { UseLocalTranscription = true, LocalModelId = "tiny.en" }, CsvStore);
             vm.AddFiles([path]); await vm.StartAsync();
             Assert.True(vm.Files[0].IsComplete); Assert.Empty(prep.Directories);
             Assert.True(client.Options!.UseLocal); Assert.Equal("tiny.en", client.Options.LocalModelId);
             Assert.Equal(new byte[] { 1, 2, 3 }, File.ReadAllBytes(path));
+            Assert.True(vm.Files[0].HasCsv);
         }
         finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public async Task NoSpeech_SavesHeaderOnlyCsv()
+    {
+        var client = new FakeClient { Response = """{"text":"","segments":[]}""" };
+        var vm = new FileTranscriptionViewModel(new FakePreparation(), client, new FakeSecrets("test"), () => new AppSettings(), CsvStore);
+        vm.AddFiles(["silent.wav"]); await vm.StartAsync();
+        var item = Assert.Single(vm.Files);
+        Assert.True(item.IsComplete); Assert.False(item.HasTranscript); Assert.True(item.CanSaveCsv);
+        Assert.Equal("start,end,text\r\n", File.ReadAllText(item.CsvPath!));
+        Assert.Contains("no speech", item.Status);
+    }
+
+    [Fact]
+    public async Task MissingTimestamps_ReportsFailureWithoutInventingCsv()
+    {
+        var client = new FakeClient { Response = """{"text":"No timing supplied"}""" };
+        var vm = new FileTranscriptionViewModel(new FakePreparation(), client, new FakeSecrets("test"), () => new AppSettings(), CsvStore);
+        vm.AddFiles(["missing-timing.wav"]); await vm.StartAsync();
+        Assert.False(vm.Files[0].IsComplete);
+        Assert.Contains("without speech timestamps", vm.Files[0].Status);
+        Assert.Empty(Directory.GetFiles(_output));
+    }
+
+    [Fact]
+    public async Task CsvWriteFailure_PreservesCompletedSpeechForManualExport_WithoutRetranscribing()
+    {
+        var blocked = Path.Combine(_output, "file-instead-of-folder");
+        File.WriteAllText(blocked, "existing data");
+        var client = new FakeClient();
+        var vm = new FileTranscriptionViewModel(new FakePreparation(), client, new FakeSecrets("test"), () => new AppSettings(), new FileTranscriptCsvStore(blocked));
+        vm.AddFiles(["audio.wav"]); await vm.StartAsync();
+        Assert.True(vm.Files[0].IsComplete); Assert.True(vm.Files[0].CanSaveCsv);
+        Assert.False(vm.Files[0].HasCsv); Assert.Equal(2, vm.Files[0].Segments.Count);
+        Assert.Contains("Save CSV", vm.Files[0].Status);
+        await vm.StartAsync(); Assert.Equal(2, client.Calls);
+        Assert.Equal("existing data", File.ReadAllText(blocked));
     }
 
     private sealed class FakePreparation : IAudioFilePreparationService
@@ -84,7 +141,7 @@ public sealed class FileTranscriptionViewModelTests
             Directories.Add(directory);
             var paths = new[] { Path.Combine(directory, "one.flac"), Path.Combine(directory, "two.flac") };
             foreach (var file in paths) File.WriteAllBytes(file, [1]);
-            return Task.FromResult(new PreparedAudio(paths, 10, 2, "Lossless", directory));
+            return Task.FromResult(new PreparedAudio(paths, 10, 2, "Lossless", directory, [0, 30]));
         }
     }
 
@@ -99,6 +156,7 @@ public sealed class FileTranscriptionViewModelTests
     {
         public int Calls { get; private set; }
         public bool BlockSecondPart { get; init; }
+        public string? Response { get; init; }
         public TaskCompletionSource SecondPartStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TranscriptionOptions? Options { get; private set; }
         public async Task<string> TranscribeAsync(string apiKey, string audioFilePath, TranscriptionOptions options, CancellationToken cancellationToken)
@@ -109,7 +167,8 @@ public sealed class FileTranscriptionViewModelTests
                 SecondPartStarted.SetResult();
                 await Task.Delay(Timeout.Infinite, cancellationToken);
             }
-            return Calls % 2 == 1 ? "part one" : "part two";
+            var text = Calls % 2 == 1 ? "part one" : "part two";
+            return Response ?? JsonSerializer.Serialize(new { text, duration = 2.5, segments = new[] { new { start = 1.25, end = 2.5, text } } });
         }
         // File transcription must never call the extra token-consuming models.
         public Task<string> CleanupTranscriptAsync(string apiKey, string transcript, string modelId, WritingCleanupTone tone, string? prompt, CancellationToken cancellationToken) => throw new Xunit.Sdk.XunitException("Unexpected rewrite request");

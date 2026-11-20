@@ -32,6 +32,7 @@ internal static class Program
         try
         {
             var output = Path.GetFullPath(args[1]); Directory.CreateDirectory(output);
+            if (args[0] == "file-csv-ui") return FileTranscriptionSmoke.Run(output, args[2]);
             if (args[0] == "wake-optimisation-research") { WakeOptimisationResearch.Run(output, args[2], args[3], args[4]).GetAwaiter().GetResult(); return 0; }
             if (args[0] is "wake-optimised-corpus" or "wake-optimised-noise") { WakeOptimisationResearch.Live(output, args[2], args[0] == "wake-optimised-noise").GetAwaiter().GetResult(); return 0; }
             if (args[0] == "personal-wake") { PersonalWakeAsync(output, args.Skip(2).ToArray()).GetAwaiter().GetResult(); return 0; }

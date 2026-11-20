@@ -6,6 +6,21 @@ namespace Wyspa.Tests;
 
 public sealed class GroqTranscriptionClientTests
 {
+    [Fact]
+    public async Task TimestampedUpload_RequestsVerboseJsonAndSegmentTimestamps()
+    {
+        var path = Path.GetTempFileName();
+        try
+        {
+            using var request = GroqTranscriptionClient.CreateTranscriptionRequest("test", path,
+                new TranscriptionOptions("whisper-large-v3-turbo", "en", "Wyspa", ResponseFormat: "verbose_json"));
+            var fields = (MultipartFormDataContent)request.Content!;
+            Assert.Equal("verbose_json", await fields.Single(f => f.Headers.ContentDisposition!.Name!.Trim('"') == "response_format").ReadAsStringAsync());
+            var granularities = await Task.WhenAll(fields.Where(f => f.Headers.ContentDisposition!.Name!.Trim('"') == "timestamp_granularities[]").Select(f => f.ReadAsStringAsync()));
+            Assert.Contains("segment", granularities);
+        }
+        finally { File.Delete(path); }
+    }
     [Theory]
     [InlineData(".flac", "audio/flac")]
     [InlineData(".mp3", "audio/mpeg")]
